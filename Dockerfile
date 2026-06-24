@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Залежності окремим шаром для кешу.
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev --no-audit --no-fund
 
 # Решта коду. Сміття відсікає .dockerignore.
 COPY . .
