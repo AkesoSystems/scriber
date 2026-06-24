@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>УЗД-протокол — статистика</title>
+<style>
+  :root{--ink:#16242F;--paper:#FFF;--bg:#EEF2F4;--teal:#1F8A8C;--teal-dark:#15686A;
+    --line:#D6DDE1;--muted:#5C6B74;--sans:"IBM Plex Sans",system-ui,"Segoe UI",sans-serif;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);background:var(--paper);
+    display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  header h1{margin:0;font-size:17px;font-weight:600;}
+  header a{font-size:13px;color:var(--teal-dark);}
+  .usersel{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);}
+  select{font-family:var(--sans);font-size:14px;padding:8px 12px;border:1px solid var(--line);
+    border-radius:8px;background:var(--paper);color:var(--ink);}
+  .wrap{max-width:980px;margin:0 auto;padding:24px;}
+  .scope{font-size:13.5px;color:var(--muted);margin:0 0 16px;}
+  .scope b{color:var(--teal-dark);}
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:18px;}
+  .card .label{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .card .val{font-size:30px;font-weight:600;margin-top:6px;}
+  .card .sub{font-size:12.5px;color:var(--muted);margin-top:4px;}
+  h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:30px 0 10px;}
+  table{width:100%;background:var(--paper);border:1px solid var(--line);border-radius:10px;
+    border-collapse:separate;border-spacing:0;overflow:hidden;font-size:14px;}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);}
+  th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:#F7F9FA;}
+  tr:last-child td{border-bottom:none;}
+  tbody tr.clickable{cursor:pointer;}
+  tbody tr.clickable:hover{background:#F2F7F6;}
+  .bar{display:flex;height:26px;border-radius:6px;overflow:hidden;border:1px solid var(--line);max-width:420px;}
+  .bar .w{background:var(--teal);}
+  .bar .p{background:#9FBCC6;}
+  .bar .c{background:#E5C57B;}
+  .legend{font-size:13px;color:var(--muted);margin-top:8px;}
+  .err{color:#B3372F;}
+  @media(max-width:700px){
+    .wrap{padding:14px;}
+    .usersel{margin-left:0;width:100%;}
+    table{font-size:12.5px;}
+    th,td{padding:8px 8px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Статистика тесту</h1>
+  <a href="/">← до застосунку</a>
+  <span class="usersel">
+    Користувач:
+    <select id="userSel"><option value="">Всі користувачі</option></select>
+  </span>
+</header>
+<div class="wrap">
+  <p class="scope" id="scope"></p>
+  <div class="cards" id="cards"></div>
+
+  <h2>Експорти: Word vs PDF vs Копіювання</h2>
+  <div class="bar" id="bar"><div class="w"></div><div class="p"></div><div class="c"></div></div>
+  <div class="legend" id="barLegend"></div>
+
+  <h2 id="usersTitle">По користувачах <span style="text-transform:none;font-weight:400">(клік по рядку — детальніше)</span></h2>
+  <table id="usersTable">
+    <thead><tr><th>Логін</th><th>Візити</th><th>Записи</th><th>Серед. запис</th><th>Протоколи</th><th>Помилки</th><th>Експорти</th><th>Оцінка</th></tr></thead>
+    <tbody id="usersBody"></tbody>
+  </table>
+
+  <h2>По днях</h2>
+  <table>
+    <thead><tr><th>Дата</th><th>Візити</th><th>Записи</th><th>Протоколи</th><th>Експорти</th></tr></thead>
+    <tbody id="daysBody"></tbody>
+  </table>
+</div>
+<script>
+const KEY = new URLSearchParams(location.search).get("key") || "";
+const sel = document.getElementById("userSel");
+let usersLoaded = false;
+
+function fmtSec(s){
+  if (!s) return "0 с";
+  return s >= 60 ? Math.floor(s/60) + " хв " + (s%60) + " с" : s + " с";
+}
+
+function load(user){
+  const q = "/api/stats?key=" + encodeURIComponent(KEY) + (user ? "&user=" + encodeURIComponent(user) : "");
+  fetch(q).then(r => {
+    if (!r.ok) throw new Error("Невірний ключ доступу");
+    return r.json();
+  }).then(d => {
+    // селектор користувачів наповнюємо один раз
+    if (!usersLoaded){
+      d.users.forEach(u => {
+        const o = document.createElement("option");
+        o.value = u; o.textContent = u;
+        sel.appendChild(o);
+      });
+      usersLoaded = true;
+    }
+
+    document.getElementById("scope").innerHTML = d.filteredBy
+      ? "Показано активність користувача <b>" + d.filteredBy + "</b>."
+      : "Показано <b>загальну</b> активність по всіх користувачах.";
+
+    const rating = d.rating && d.rating.count ? "★ " + d.rating.avg + " / 5" : "—";
+    const ratingSub = d.rating && d.rating.count
+      ? "оцінок: " + d.rating.count + " (5★:" + d.rating.dist[5] + " 4★:" + d.rating.dist[4] +
+        " 3★:" + d.rating.dist[3] + " 2★:" + d.rating.dist[2] + " 1★:" + d.rating.dist[1] + ")"
+      : "оцінок ще немає";
+
+    const totalExp = d.exports.word + d.exports.pdf + d.exports.copy;
+    const cards = [
+      ["Візити", d.visits, "відкриттів сторінки"],
+      ["Унікальні пристрої", d.uniqueDevices, "різних браузерів/телефонів"],
+      ["Записів диктовки", d.recordings, "середня тривалість: " + fmtSec(d.avgRecordingSec)],
+      ["Протоколів сформовано", d.protocolsGenerated, "середній час генерації: " + fmtSec(d.avgGenerateSec)],
+      ["Оцінка якості", rating, ratingSub],
+      ["Помилок генерації", d.generateErrors, d.generateErrors ? "дивіться pm2 logs uzd" : "усе чисто"],
+      ["Експортів усього", totalExp, "Word: " + d.exports.word + " · PDF: " + d.exports.pdf + " · Копі: " + d.exports.copy],
+    ];
+    document.getElementById("cards").innerHTML = cards.map(c =>
+      '<div class="card"><div class="label">' + c[0] + '</div><div class="val' +
+      (c[0].startsWith("Помилок") && c[1] ? ' err' : '') + '">' + c[1] +
+      '</div><div class="sub">' + c[2] + '</div></div>').join("");
+
+    if (totalExp){
+      document.querySelector("#bar .w").style.width = (d.exports.word / totalExp * 100) + "%";
+      document.querySelector("#bar .p").style.width = (d.exports.pdf / totalExp * 100) + "%";
+      document.querySelector("#bar .c").style.width = (d.exports.copy / totalExp * 100) + "%";
+      document.getElementById("barLegend").textContent =
+        "Word " + Math.round(d.exports.word / totalExp * 100) + "% · PDF " +
+        Math.round(d.exports.pdf / totalExp * 100) + "% · Копіювання " +
+        Math.round(d.exports.copy / totalExp * 100) + "%";
+    } else {
+      document.querySelectorAll("#bar div").forEach(el => el.style.width = "0");
+      document.getElementById("barLegend").textContent = "Експортів ще не було.";
+    }
+
+    const names = Object.keys(d.byUser || {}).sort();
+    document.getElementById("usersBody").innerHTML = names.length
+      ? names.map(name => { const u = d.byUser[name];
+          const avgRec = u.recordings ? fmtSec(Math.round(u.recSec / u.recordings)) : "—";
+          const rate = u.ratingCount ? "★ " + (Math.round(u.ratingTotal / u.ratingCount * 10) / 10) : "—";
+          return '<tr class="clickable" data-user="' + name + '"><td><b>' + name + "</b></td><td>" + u.visits +
+                 "</td><td>" + u.recordings + "</td><td>" + avgRec + "</td><td>" + u.protocols +
+                 "</td><td>" + u.errors + "</td><td>" + u.exports + "</td><td>" + rate + "</td></tr>"; }).join("")
+      : '<tr><td colspan="8" style="color:#9AA7AE">Даних ще немає.</td></tr>';
+
+    const days = Object.keys(d.byDay).sort().reverse();
+    document.getElementById("daysBody").innerHTML = days.length
+      ? days.map(k => { const v = d.byDay[k];
+          return "<tr><td>" + k + "</td><td>" + v.visits + "</td><td>" + v.recordings +
+                 "</td><td>" + v.protocols + "</td><td>" + v.exports + "</td></tr>"; }).join("")
+      : '<tr><td colspan="5" style="color:#9AA7AE">Даних ще немає — зайдіть у застосунок і зробіть тестовий протокол.</td></tr>';
+  }).catch(e => {
+    document.getElementById("cards").innerHTML =
+      '<div class="card"><div class="label">Помилка</div><div class="sub">' + e.message +
+      '. Відкрийте сторінку з ключем: /stats?key=ВАШ_КЛЮЧ</div></div>';
+  });
+}
+
+sel.addEventListener("change", () => load(sel.value));
+document.getElementById("usersBody").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.clickable");
+  if (!tr) return;
+  sel.value = tr.dataset.user;
+  load(sel.value);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+load("");
+</script>
+</body>
+</html>

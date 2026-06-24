@@ -1,0 +1,12 @@
+{
+  "name": "uzd-protocol-mvp",
+  "version": "0.1.0",
+  "description": "МВП: диктування протоколу УЗД -> Claude Max (через Claude Code CLI) -> редагований документ -> DOC/PDF",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

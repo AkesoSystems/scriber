@@ -1,0 +1,8 @@
+node_modules
+analytics.jsonl
+*.bak
+*.bak_*
+.htpasswd
+.env
+.claude/
+.DS_Store

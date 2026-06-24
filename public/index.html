@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>УЗД-протокол — диктування</title>
+<style>
+  :root{
+    --ink:#16242F;
+    --screen:#0B1418;
+    --screen-text:#C9E8E4;
+    --paper:#FFFFFF;
+    --bg:#EEF2F4;
+    --teal:#1F8A8C;
+    --teal-dark:#15686A;
+    --amber:#B07A1F;
+    --line:#D6DDE1;
+    --mono:"IBM Plex Mono","Consolas",monospace;
+    --sans:"IBM Plex Sans",system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  header{padding:18px 28px;border-bottom:1px solid var(--line);background:var(--paper);
+    display:flex;align-items:baseline;gap:14px;}
+  header h1{margin:0;font-size:17px;font-weight:600;letter-spacing:.02em;}
+  header .sub{font-size:12.5px;color:#5C6B74;}
+  .wrap{max-width:1240px;margin:0 auto;padding:22px;display:grid;grid-template-columns:430px 1fr;gap:22px;}
+  @media(max-width:980px){.wrap{grid-template-columns:1fr}}
+
+  /* ── Панель диктовки: стилізована під екран УЗД-апарата ── */
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .panel-h{padding:12px 16px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    color:#5C6B74;border-bottom:1px solid var(--line);}
+  .screen{background:var(--screen);color:var(--screen-text);font-family:var(--mono);font-size:13.5px;
+    line-height:1.65;min-height:260px;max-height:420px;overflow-y:auto;padding:16px;white-space:pre-wrap;}
+  .screen .interim{opacity:.45}
+  .screen:empty::before{content:"Натисніть «Почати запис» і диктуйте протокол...";opacity:.35;}
+  .controls{padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);}
+  button{font-family:var(--sans);font-size:14px;font-weight:600;border:none;border-radius:8px;
+    padding:11px 18px;cursor:pointer;transition:background .15s;}
+  button:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  .btn-rec{background:var(--teal);color:#fff;}
+  .btn-rec:hover{background:var(--teal-dark)}
+  .btn-rec.recording{background:#B3372F;}
+  .btn-ghost{background:transparent;color:#5C6B74;border:1px solid var(--line);}
+  .btn-ghost:hover{background:#F2F5F6}
+  .btn-main{background:var(--ink);color:#fff;}
+  .btn-main:hover{background:#243845}
+  .btn-main:disabled{background:#9AA7AE;cursor:default;}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#fff;margin-right:8px;vertical-align:1px;}
+  .recording .dot{animation:pulse 1.1s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  @media(prefers-reduced-motion:reduce){.recording .dot{animation:none}}
+  .hint{padding:0 16px 14px;font-size:12.5px;color:#5C6B74;line-height:1.5;}
+
+  /* ── Документ ── */
+  .doc-panel .panel-h{display:flex;justify-content:space-between;align-items:center;}
+  .doc-actions{display:flex;gap:8px;}
+  .doc-actions button{padding:7px 13px;font-size:13px;}
+  #doc{padding:34px 44px;min-height:560px;outline:none;font-size:14.5px;line-height:1.7;}
+  #doc:empty::before{content:"Тут з'явиться сформований протокол. Його можна редагувати як звичайний текст.";color:#9AA7AE;}
+  #doc h2{font-size:17px;text-align:center;letter-spacing:.04em;margin:0 0 18px;}
+  #doc h3{font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-dark);
+    border-bottom:1px solid var(--line);padding-bottom:4px;margin:20px 0 8px;}
+  #doc p{margin:6px 0;}
+  .flag{background:#FBF0DB;color:var(--amber);font-weight:700;padding:0 4px;border-radius:3px;}
+  .status{padding:10px 16px;font-size:13px;color:#5C6B74;min-height:38px;}
+  .status.err{color:#B3372F;}
+
+  /* ── Оцінка якості ── */
+  .rate{display:none;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);
+    background:#F7FAF9;font-size:13.5px;color:var(--ink);flex-wrap:wrap;}
+  .rate.show{display:flex;}
+  .rate .stars{display:flex;gap:2px;}
+  .rate .star{font-size:24px;color:#C7D2D7;cursor:pointer;background:none;border:none;padding:2px 3px;line-height:1;}
+  .rate .star:hover,.rate .star.on{color:#E5A33B;}
+  .rate .thanks{color:var(--teal-dark);font-weight:600;}
+
+  @media print{
+    body *{visibility:hidden}
+    #doc,#doc *{visibility:visible}
+    #doc{position:absolute;left:0;top:0;width:100%;padding:0;column-count:1!important;}
+    .flag{background:none;color:inherit;font-weight:inherit;}
+  }
+
+  /* ── Мобільна версія ── */
+  @media(max-width:700px){
+    header{padding:14px 16px;flex-wrap:wrap;gap:6px;}
+    .wrap{padding:12px;gap:14px;}
+    .screen{min-height:180px;max-height:38vh;font-size:13px;
+      word-break:break-word;overflow-wrap:anywhere;column-count:1;}
+    .controls{padding:12px;}
+    .controls button{flex:1 1 auto;min-width:0;padding:12px 10px;font-size:13.5px;}
+    .doc-panel .panel-h{flex-wrap:wrap;gap:8px;}
+    .doc-actions{width:100%;display:flex;}
+    .doc-actions button{flex:1;padding:9px 6px;font-size:12.5px;}
+    #doc{padding:18px 16px;min-height:300px;font-size:14px;}
+    .hint{font-size:12px;}
+    .rate{gap:8px;}
+    .rate .star{font-size:28px;padding:4px 5px;} /* більші зони дотику */
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>УЗД-протокол</h1>
+  <span class="sub">диктування → структурування → редагування → експорт</span>
+</header>
+
+<div class="wrap">
+  <section class="panel">
+    <div class="panel-h">Диктовка</div>
+    <div class="screen" id="screen"></div>
+    <div class="controls">
+      <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
+      <button id="clearBtn" class="btn-ghost">Очистити</button>
+      <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
+    </div>
+    <div class="hint">Працює у Chrome або Edge. Диктуйте українською; цифри й розміри називайте чітко
+      («сто сорок два міліметри»). Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
+  </section>
+
+  <section class="panel doc-panel">
+    <div class="panel-h">
+      <span>Протокол (можна редагувати)</span>
+      <span class="doc-actions">
+        <button id="copyBtn" class="btn-ghost">Копіювати</button>
+        <button id="docBtn" class="btn-ghost">Зберегти Word</button>
+        <button id="pdfBtn" class="btn-ghost">Зберегти PDF</button>
+      </span>
+    </div>
+    <div id="doc" contenteditable="true" spellcheck="true"></div>
+    <div class="rate" id="rate">
+      <span>Оцініть якість протоколу:</span>
+      <span class="stars" id="stars">
+        <button class="star" data-v="1" aria-label="1 з 5">★</button><button class="star" data-v="2" aria-label="2 з 5">★</button><button class="star" data-v="3" aria-label="3 з 5">★</button><button class="star" data-v="4" aria-label="4 з 5">★</button><button class="star" data-v="5" aria-label="5 з 5">★</button>
+      </span>
+    </div>
+    <div class="status" id="status"></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // ── Аналітика: лише події і числа, без тексту диктовок ──
+  let uid = localStorage.getItem("uzd_uid");
+  if (!uid){ uid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("uzd_uid", uid); }
+  function track(event, value){
+    try{ fetch("/api/track", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ uid, event, value }) }); }catch(_){}
+  }
+  track("visit");
+
+  const screen = document.getElementById("screen");
+  const recBtn = document.getElementById("recBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const genBtn = document.getElementById("genBtn");
+  const doc = document.getElementById("doc");
+  const statusEl = document.getElementById("status");
+  const docBtn = document.getElementById("docBtn");
+  const pdfBtn = document.getElementById("pdfBtn");
+
+  let finalText = "";
+  let recording = false;
+  let rec = null;
+  let recStartedAt = 0;
+  let stickToBottom = true;
+
+  // Якщо людина прокрутила вгору — не смикаємо екран; повернулась донизу — знову автоскрол
+  screen.addEventListener("scroll", () => {
+    stickToBottom = screen.scrollTop + screen.clientHeight >= screen.scrollHeight - 40;
+  });
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    setStatus("Цей браузер не підтримує розпізнавання мовлення. Відкрийте сторінку у Chrome або Edge.", true);
+    recBtn.disabled = true;
+  }
+
+  function setStatus(msg, isErr){
+    statusEl.textContent = msg || "";
+    statusEl.className = "status" + (isErr ? " err" : "");
+  }
+
+  function render(interim){
+    screen.innerHTML = "";
+    screen.append(document.createTextNode(finalText));
+    if (interim){
+      const s = document.createElement("span");
+      s.className = "interim";
+      s.textContent = interim;
+      screen.append(s);
+    }
+    if (stickToBottom) screen.scrollTop = screen.scrollHeight;
+    genBtn.disabled = !finalText.trim();
+  }
+
+  function startRec(){
+    rec = new SR();
+    rec.lang = "uk-UA";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t + " ";
+        else interim += t;
+      }
+      render(interim);
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed") {
+        setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
+        stopRec();
+      }
+    };
+    rec.onend = () => { if (recording) rec.start(); }; // автоперезапуск
+    rec.start();
+    recording = true;
+    recStartedAt = Date.now();
+    track("rec_start");
+    recBtn.classList.add("recording");
+    recBtn.innerHTML = '<span class="dot"></span>Зупинити запис';
+    setStatus("Йде запис — диктуйте.");
+  }
+
+  function stopRec(){
+    recording = false;
+    if (recStartedAt){ track("rec_stop", Math.round((Date.now() - recStartedAt) / 1000)); recStartedAt = 0; }
+    if (rec) try{ rec.stop(); }catch(_){}
+    recBtn.classList.remove("recording");
+    recBtn.innerHTML = '<span class="dot"></span>Почати запис';
+    setStatus("");
+    render("");
+  }
+
+  recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
+
+  clearBtn.addEventListener("click", () => {
+    finalText = ""; render("");
+  });
+
+  genBtn.addEventListener("click", async () => {
+    if (recording) stopRec();
+    genBtn.disabled = true;
+    setStatus("Claude формує протокол... зазвичай 15–40 секунд.");
+    track("generate");
+    const t0 = Date.now();
+    try{
+      const r = await fetch("/api/protocol", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text: finalText })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Помилка сервера");
+      track("generate_ok", Math.round((Date.now() - t0) / 1000));
+      doc.innerHTML = data.html.replace(/\[\?\]/g, '<span class="flag">[?]</span>');
+      const flags = doc.querySelectorAll(".flag").length;
+      setStatus(flags
+        ? "Протокол готовий. Перевірте " + flags + " позначених місць [?] перед збереженням."
+        : "Протокол готовий. Перегляньте та відредагуйте за потреби.");
+    }catch(err){
+      track("generate_err");
+      setStatus(err.message, true);
+    }finally{
+      genBtn.disabled = !finalText.trim();
+    }
+  });
+
+  // ── Оцінка якості: показуємо після збереження документа ──
+  const rateEl = document.getElementById("rate");
+  let rated = false;
+  function showRating(){ if (!rated) rateEl.classList.add("show"); }
+  document.getElementById("stars").addEventListener("click", (e) => {
+    const v = Number(e.target.dataset && e.target.dataset.v);
+    if (!v || rated) return;
+    rated = true;
+    track("rating", v);
+    document.querySelectorAll("#stars .star").forEach((s) => {
+      s.classList.toggle("on", Number(s.dataset.v) <= v);
+      s.style.cursor = "default";
+    });
+    const t = document.createElement("span");
+    t.className = "thanks";
+    t.textContent = "Дякуємо!";
+    rateEl.appendChild(t);
+    setTimeout(() => rateEl.classList.remove("show"), 2500);
+  });
+
+  // ── Копіювати протокол (з таблицями) ──
+  // Кладемо у буфер І HTML, І звичайний текст: rich-редактори (Word, Google Docs,
+  // МІС) вставлять таблиці як таблиці, а прості поля — як текст.
+  document.getElementById("copyBtn").addEventListener("click", async () => {
+    if (!doc.innerHTML.trim()) return setStatus("Документ порожній.", true);
+    const html = doc.innerHTML.replace(/<span class="flag">(\[\?\])<\/span>/g, "$1");
+    const text = doc.innerText.replace(/\n{3,}/g, "\n\n").trim();
+    let copied = false;
+    try{
+      if (navigator.clipboard && window.ClipboardItem){
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+        copied = true;
+      }
+    }catch(_){ /* нижче — резервні варіанти */ }
+    if (!copied){
+      try{ await navigator.clipboard.writeText(text); copied = true; }catch(_){}
+    }
+    if (!copied){
+      // запасний варіант для старих браузерів
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); ta.remove();
+    }
+    track("export_copy");
+    setStatus("Протокол скопійовано (з таблицями) — можна вставляти у свою МІС чи документ.");
+    showRating();
+  });
+
+  // ── Експорт Word (.doc через HTML — Word відкриває нативно) ──
+  docBtn.addEventListener("click", () => {
+    if (!doc.innerHTML.trim()) return setStatus("Документ порожній.", true);
+    const html =
+      '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">' +
+      '<head><meta charset="utf-8"><style>body{font-family:"Times New Roman";font-size:12pt;line-height:1.5}' +
+      'h2{text-align:center;font-size:14pt}h3{font-size:12pt;text-transform:uppercase}</style></head><body>' +
+      doc.innerHTML.replace(/<span class="flag">(\[\?\])<\/span>/g, "$1") +
+      "</body></html>";
+    const blob = new Blob(["\ufeff", html], { type: "application/msword" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "protokol-uzd-" + new Date().toISOString().slice(0,10) + ".doc";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    track("export_word");
+    showRating();
+  });
+
+  // ── Експорт PDF: системний друк, друкується лише документ ──
+  pdfBtn.addEventListener("click", () => {
+    if (!doc.innerHTML.trim()) return setStatus("Документ порожній.", true);
+    track("export_pdf");
+    window.print();
+    showRating();
+  });
+})();
+</script>
+</body>
+</html>

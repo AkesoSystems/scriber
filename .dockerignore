@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+*.bak
+*.bak_*
+.htpasswd
+analytics.jsonl
+.claude
+.DS_Store
+Dockerfile
+.dockerignore
+README.md
