@@ -36,15 +36,52 @@ app.use(express.static(path.join(__dirname, "public")));
 // Текст диктовок / протоколів НІКОЛИ не логуються.
 
 // Секретний ключ доступу до статистики — береться з .env (ADMIN_KEY).
-// Значення за замовчуванням лишене, щоб сайт не зламався, якщо .env відсутній.
-const ADMIN_KEY = process.env.ADMIN_KEY || "admtest";
+// Дефолт "admtest" вважається НЕзаданим: /stats і /api/stats тоді віддають 503
+// (бо дашборд тепер показує детальну активність по кожному лікарю).
+const ADMIN_KEY = process.env.ADMIN_KEY || "";
+const ADMIN_KEY_OK = ADMIN_KEY && ADMIN_KEY !== "admtest";
+if (!ADMIN_KEY_OK) {
+  console.error("[stats] ADMIN_KEY не заданий (або дефолтний) — /stats і /api/stats вимкнені до налаштування env.");
+}
 
 const ANALYTICS_FILE = path.join(__dirname, "analytics.jsonl");
 const ALLOWED_EVENTS = new Set([
-  "visit", "rec_start", "rec_stop", "transcribe",
+  "visit", "rec_start", "rec_stop", "transcribe_ok", "transcribe_err",
   "generate", "generate_ok", "generate_err",
   "export_word", "export_pdf", "export_copy", "rating",
 ]);
+
+// ── Whitelist значень meta — PHI-firewall ──
+// У analytics.jsonl потрапляють ЛИШЕ enum/числа з цих наборів. Жодного вільного тексту
+// (Groq-body, .message, CLI stderr можуть містити фрагменти диктовки → ніколи не логуємо).
+const EV_PROVIDERS = new Set(["bedrock", "anthropic", "cli"]);
+const EV_STAGES = new Set(["transcribe", "generate"]);
+const EV_CODES = new Set([
+  "groq_badkey", "groq_empty", "groq_500", "groq_network",
+  "bedrock_throttle", "bedrock_empty", "bedrock_timeout", "bedrock_throw",
+  "anthropic_empty", "anthropic_throw",
+  "cli_timeout", "cli_limit", "cli_notfound", "cli_empty",
+  "no_provider", "network", "unknown",
+]);
+const EV_MODELS = new Set([
+  "us.amazon.nova-pro-v1:0", "amazon.nova-pro-v1:0", "claude-opus-4-8", "claude-cli-max",
+]);
+
+// Захист від необмеженого росту файлу (volume — один файл, тому НЕ rollover, а обрізання
+// найстаріших рядків з тим самим inode-шляхом). При 6 юзерах майже ніколи не спрацює.
+const ANALYTICS_MAX_LINES = 500000;
+let _appendsSinceTrim = 0;
+function maybeTrimAnalytics() {
+  if (++_appendsSinceTrim < 2000) return;
+  _appendsSinceTrim = 0;
+  try {
+    const lines = fs.readFileSync(ANALYTICS_FILE, "utf8").split("\n").filter(Boolean);
+    if (lines.length > ANALYTICS_MAX_LINES) {
+      const tail = lines.slice(lines.length - ANALYTICS_MAX_LINES);
+      fs.writeFileSync(ANALYTICS_FILE, tail.join("\n") + "\n");
+    }
+  } catch (_) { /* файлу ще нема або зайнятий — пропускаємо */ }
+}
 
 // Витягуємо логін з Basic Auth (його ставить nginx: test, test2...)
 function getAuthUser(req) {
@@ -55,30 +92,58 @@ function getAuthUser(req) {
   } catch (_) { return "невідомо"; }
 }
 
-function logEvent(uid, event, value, user) {
-  const row = JSON.stringify({
+// meta — необов'язковий об'єкт; беремо ЛИШЕ whitelisted ключі (див. PHI-firewall вище).
+function logEvent(uid, event, value, user, meta) {
+  const row = {
     t: Date.now(),
     uid: String(uid || "anon").slice(0, 40),
     user: String(user || "невідомо").slice(0, 40),
     event,
     value: typeof value === "number" ? value : null,
+  };
+  if (meta && typeof meta === "object") {
+    if (EV_PROVIDERS.has(meta.provider)) row.provider = meta.provider;
+    if (EV_STAGES.has(meta.stage)) row.stage = meta.stage;
+    if (meta.code !== undefined) row.code = EV_CODES.has(meta.code) ? meta.code : "unknown";
+    if (EV_MODELS.has(meta.model)) row.model = meta.model;
+    if (typeof meta.ms === "number" && isFinite(meta.ms) && meta.ms >= 0 && meta.ms <= 600000) {
+      row.ms = Math.round(meta.ms);
+    }
+    if (meta.fallback === true) row.fallback = true;
+  }
+  fs.appendFile(ANALYTICS_FILE, JSON.stringify(row) + "\n", (err) => {
+    if (err) console.error("[analytics] запис не вдався:", err.message);
   });
-  fs.appendFile(ANALYTICS_FILE, row + "\n", () => {});
+  maybeTrimAnalytics();
 }
 
 app.post("/api/track", (req, res) => {
-  const { uid, event, value } = req.body || {};
+  const { uid, event, value, provider, model, code, stage, ms, fallback } = req.body || {};
   if (!ALLOWED_EVENTS.has(event)) return res.status(400).json({ ok: false });
-  logEvent(uid, event, value, getAuthUser(req));
+  // logEvent пересанітизує meta через whitelist — ворожий клієнт текст не вкине.
+  logEvent(uid, event, value, getAuthUser(req), { provider, model, code, stage, ms, fallback });
   res.json({ ok: true });
 });
 
+// Ключ дня YYYY-MM-DD у Europe/Kyiv (стабільний для byDay/byUserDay/today).
+function dayKey(t) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kyiv", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(t));
+}
+// Різниця в календарних днях між двома ключами (a - b).
+function dayDiff(aKey, bKey) {
+  return Math.round((Date.parse(aKey) - Date.parse(bKey)) / 86400000);
+}
+
 app.get("/stats", (req, res) => {
+  if (!ADMIN_KEY_OK) return res.status(503).send("Статистика не налаштована: задайте ADMIN_KEY у середовищі.");
   if (req.query.key !== ADMIN_KEY) return res.status(403).send("Доступ заборонено");
   res.sendFile(path.join(__dirname, "stats.html"));
 });
 
 app.get("/api/stats", (req, res) => {
+  if (!ADMIN_KEY_OK) return res.status(503).json({ error: "stats_disabled" });
   if (req.query.key !== ADMIN_KEY) return res.status(403).json({ error: "forbidden" });
   let rows = [];
   try {
@@ -98,9 +163,11 @@ app.get("/api/stats", (req, res) => {
   const uniq = new Set();
   const days = {};
   const users = {};
+  const byUserDay = {};
+  const errBy = { code: {}, provider: {}, stage: {} };
   const sum = {
     visits: 0, recStarts: 0, recStops: 0, recSecTotal: 0,
-    gen: 0, genOk: 0, genErr: 0, genSecTotal: 0,
+    gen: 0, genOk: 0, genErr: 0, genSecTotal: 0, genMsTotal: 0, genMsCount: 0,
     word: 0, pdf: 0, copy: 0,
     ratingTotal: 0, ratingCount: 0, ratingDist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
   };
@@ -110,26 +177,43 @@ app.get("/api/stats", (req, res) => {
     users[k] = users[k] || { visits: 0, recordings: 0, recSec: 0, protocols: 0, errors: 0, exports: 0, ratingTotal: 0, ratingCount: 0 };
     return users[k];
   }
+  function udOf(user, d) {
+    byUserDay[user] = byUserDay[user] || {};
+    byUserDay[user][d] = byUserDay[user][d] || { visits: 0, recordings: 0, protocols: 0, errors: 0, exports: 0 };
+    return byUserDay[user][d];
+  }
+  function bumpErr(r) {
+    if (r.code) errBy.code[r.code] = (errBy.code[r.code] || 0) + 1;
+    if (r.provider) errBy.provider[r.provider] = (errBy.provider[r.provider] || 0) + 1;
+    if (r.stage) errBy.stage[r.stage] = (errBy.stage[r.stage] || 0) + 1;
+  }
 
   for (const r of rows) {
     uniq.add(r.uid);
-    const d = new Date(r.t).toISOString().slice(0, 10);
+    const d = dayKey(r.t);
     days[d] = days[d] || { visits: 0, recordings: 0, protocols: 0, exports: 0 };
     const u = userOf(r);
+    const ud = udOf(r.user || "—", d);
     switch (r.event) {
-      case "visit": sum.visits++; days[d].visits++; u.visits++; break;
+      case "visit": sum.visits++; days[d].visits++; u.visits++; ud.visits++; break;
       case "rec_start": sum.recStarts++; break;
       case "rec_stop":
-        sum.recStops++; days[d].recordings++; u.recordings++;
+        sum.recStops++; days[d].recordings++; u.recordings++; ud.recordings++;
         if (r.value) { sum.recSecTotal += r.value; u.recSec += r.value; } break;
       case "generate": sum.gen++; break;
       case "generate_ok":
-        sum.genOk++; days[d].protocols++; u.protocols++;
-        if (r.value) sum.genSecTotal += r.value; break;
-      case "generate_err": sum.genErr++; u.errors++; break;
-      case "export_word": sum.word++; days[d].exports++; u.exports++; break;
-      case "export_pdf": sum.pdf++; days[d].exports++; u.exports++; break;
-      case "export_copy": sum.copy++; days[d].exports++; u.exports++; break;
+        // Рахуємо лише СЕРВЕРНІ generate_ok (мають provider) — щоб не подвоювати з історичними клієнтськими.
+        if (r.provider) {
+          sum.genOk++; days[d].protocols++; u.protocols++; ud.protocols++;
+          if (typeof r.ms === "number") { sum.genMsTotal += r.ms; sum.genMsCount++; }
+          else if (r.value) sum.genSecTotal += r.value;
+        }
+        break;
+      case "generate_err": sum.genErr++; u.errors++; ud.errors++; bumpErr(r); break;
+      case "transcribe_err": bumpErr(r); break;
+      case "export_word": sum.word++; days[d].exports++; u.exports++; ud.exports++; break;
+      case "export_pdf": sum.pdf++; days[d].exports++; u.exports++; ud.exports++; break;
+      case "export_copy": sum.copy++; days[d].exports++; u.exports++; ud.exports++; break;
       case "rating":
         if (r.value >= 1 && r.value <= 5) {
           sum.ratingTotal += r.value; sum.ratingCount++;
@@ -140,6 +224,44 @@ app.get("/api/stats", (req, res) => {
     }
   }
 
+  // Engagement per-user (із byUserDay) — «кому написати»
+  const today = dayKey(Date.now());
+  const engagement = Object.keys(byUserDay).map((user) => {
+    const dmap = byUserDay[user];
+    const activeDays = Object.keys(dmap).filter((d) => dmap[d].protocols > 0).sort();
+    const lastActiveDay = activeDays.length ? activeDays[activeDays.length - 1] : null;
+    let protocols7d = 0, protocols30d = 0;
+    for (const d of Object.keys(dmap)) {
+      const diff = dayDiff(today, d);
+      if (diff >= 0 && diff <= 6) protocols7d += dmap[d].protocols;
+      if (diff >= 0 && diff <= 29) protocols30d += dmap[d].protocols;
+    }
+    // Серія: послідовні календарні дні з протоколами, що закінчуються на lastActiveDay.
+    let streak = 0;
+    if (lastActiveDay) {
+      const set = new Set(activeDays);
+      let cur = lastActiveDay;
+      while (set.has(cur)) { streak++; cur = dayKey(Date.parse(cur) - 86400000); }
+    }
+    const uu = users[user] || {};
+    const protocols = uu.protocols || 0;
+    const errors = uu.errors || 0;
+    return {
+      user,
+      lastActiveDay,
+      daysSinceActive: lastActiveDay ? dayDiff(today, lastActiveDay) : null,
+      protocols7d, protocols30d,
+      activeDaysStreak: streak,
+      protocolsTotal: protocols,
+      errorRate: (protocols + errors) ? Math.round(errors / (protocols + errors) * 100) : 0,
+      avgRating: uu.ratingCount ? Math.round(uu.ratingTotal / uu.ratingCount * 10) / 10 : null,
+    };
+  }).sort((a, b) => {
+    if (a.daysSinceActive === null) return 1;   // хто жодного протоколу — в кінець
+    if (b.daysSinceActive === null) return -1;
+    return b.daysSinceActive - a.daysSinceActive; // найбільш «затихлий» — перший
+  });
+
   res.json({
     users: allUsers,
     filteredBy: filterUser || null,
@@ -149,7 +271,9 @@ app.get("/api/stats", (req, res) => {
     avgRecordingSec: sum.recStops ? Math.round(sum.recSecTotal / sum.recStops) : 0,
     protocolsGenerated: sum.genOk,
     generateErrors: sum.genErr,
-    avgGenerateSec: sum.genOk ? Math.round(sum.genSecTotal / sum.genOk) : 0,
+    // Середній час: із серверного ms (точний, без RTT) для нових рядків, інакше зі старих секунд.
+    avgGenerateSec: sum.genMsCount ? Math.round(sum.genMsTotal / sum.genMsCount / 1000)
+      : (sum.genOk ? Math.round(sum.genSecTotal / sum.genOk) : 0),
     exports: { word: sum.word, pdf: sum.pdf, copy: sum.copy },
     rating: {
       avg: sum.ratingCount ? Math.round(sum.ratingTotal / sum.ratingCount * 10) / 10 : null,
@@ -158,6 +282,13 @@ app.get("/api/stats", (req, res) => {
     },
     byUser: users,
     byDay: days,
+    byUserDay,
+    engagement,
+    errors: {
+      byCode: errBy.code, byProvider: errBy.provider, byStage: errBy.stage,
+      total: sum.genErr,
+      errorRate: (sum.genOk + sum.genErr) ? Math.round(sum.genErr / (sum.genOk + sum.genErr) * 100) : 0,
+    },
   });
 });
 
@@ -358,13 +489,18 @@ const UZD_PROMPT = [
 ].join(" ");
 
 app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
+  const user = getAuthUser(req);
+  const uid = (req.body && req.body.uid) || "server";
   if (!process.env.GROQ_API_KEY) {
+    logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_badkey" });
     return res.status(500).json({ error: "Транскрипція не налаштована: відсутній GROQ_API_KEY на сервері." });
   }
   if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+    logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_empty" });
     return res.status(400).json({ error: "Порожній аудіофайл." });
   }
 
+  const t0 = Date.now();
   try {
     const form = new FormData();
     const blob = new Blob([req.file.buffer], { type: req.file.mimetype || "audio/webm" });
@@ -382,13 +518,18 @@ app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
     });
 
     if (!r.ok) {
+      // Тіло помилки Groq показуємо лікарю, але НЕ логуємо (може містити фрагменти диктовки).
       const detail = (await r.text().catch(() => "")).slice(0, 300);
+      logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_500" });
       return res.status(502).json({ error: "Помилка розпізнавання (Groq)." + (detail ? " Деталі: " + detail : "") });
     }
 
     const data = await r.json();
+    const ms = Date.now() - t0;
+    logEvent(uid, "transcribe_ok", Math.round(ms / 1000), user, { stage: "transcribe", ms });
     res.json({ text: (data.text || "").trim() });
   } catch (err) {
+    logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_network" });
     res.status(500).json({ error: "Не вдалося розпізнати аудіо: " + (err.message || "невідома помилка") });
   }
 });
@@ -413,28 +554,52 @@ const bedrock = process.env.AWS_REGION
 const BEDROCK_MODEL = process.env.BEDROCK_MODEL || "us.amazon.nova-pro-v1:0";
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
-// Формування протоколу через AWS Bedrock (Converse API). Будь-яка Bedrock-модель.
-async function protocolViaBedrock(systemPrompt, raw, res) {
+// Типізована помилка провайдера — несе ЛИШЕ enum-код (без сирих повідомлень → без PHI).
+class ProviderError extends Error {
+  constructor(code) { super(code); this.code = code; }
+}
+
+// Повідомлення лікарю за кодом (текст помилки на екран; у лог іде лише код).
+const ERROR_MESSAGES = {
+  bedrock_throttle: "Сервіс тимчасово перевантажений (ліміт запитів). Спробуйте за хвилину.",
+  bedrock_timeout: "Перевищено час очікування генерації. Спробуйте ще раз.",
+  bedrock_empty: "Модель не повернула результат. Спробуйте ще раз.",
+  bedrock_throw: "Помилка генерації протоколу. Спробуйте ще раз.",
+  anthropic_empty: "Claude не повернув результат. Спробуйте ще раз.",
+  anthropic_throw: "Помилка Claude API. Спробуйте ще раз.",
+  cli_timeout: "Не вдалося сформувати протокол за 3 хвилини (таймаут). Спробуйте ще раз.",
+  cli_limit: "Можливо, вичерпано ліміт підписки Max — спробуйте пізніше.",
+  cli_notfound: "Сервіс генерації недоступний на сервері. Зверніться до адміністратора.",
+  cli_empty: "Не вдалося сформувати протокол. Спробуйте ще раз.",
+  no_provider: "Генерація протоколу не налаштована на сервері.",
+  unknown: "Невідома помилка формування протоколу.",
+};
+
+// Формування через AWS Bedrock (Converse). Повертає HTML або кидає ProviderError(code).
+async function protocolViaBedrock(systemPrompt, raw) {
+  let r;
   try {
-    const r = await bedrock.send(new ConverseCommand({
+    r = await bedrock.send(new ConverseCommand({
       modelId: BEDROCK_MODEL,
       system: [{ text: systemPrompt }],
       messages: [{ role: "user", content: [{ text: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }] }],
       inferenceConfig: { maxTokens: 4000, temperature: 0 },
     }));
-    const text = ((r.output && r.output.message && r.output.message.content) || [])
-      .map((b) => b.text || "").join("").trim();
-    if (!text) {
-      return res.status(500).json({ error: "Модель (Bedrock) не повернула результат. Спробуйте ще раз." });
-    }
-    res.json({ html: stripFences(text) });
   } catch (e) {
-    res.status(500).json({ error: "Помилка Bedrock: " + ((e && e.message) || "невідома помилка") });
+    const name = (e && (e.name || e.__type || "")) + "";
+    if (/Throttl|TooManyRequests/i.test(name)) throw new ProviderError("bedrock_throttle");
+    if (/Timeout/i.test(name)) throw new ProviderError("bedrock_timeout");
+    throw new ProviderError("bedrock_throw");
   }
+  const text = ((r.output && r.output.message && r.output.message.content) || [])
+    .map((b) => b.text || "").join("").trim();
+  if (!text) throw new ProviderError("bedrock_empty");
+  return stripFences(text);
 }
 
-// Формування протоколу через Anthropic API (Claude Opus 4.8). Стрімінг — щоб не впертись у таймаут.
-async function protocolViaAnthropic(systemPrompt, raw, res) {
+// Формування через Anthropic API (Claude Opus 4.8). Стрімінг — щоб не впертись у таймаут.
+async function protocolViaAnthropic(systemPrompt, raw) {
+  let msg;
   try {
     const stream = anthropic.messages.stream({
       model: "claude-opus-4-8",
@@ -443,58 +608,75 @@ async function protocolViaAnthropic(systemPrompt, raw, res) {
       system: systemPrompt,
       messages: [{ role: "user", content: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }],
     });
-    const msg = await stream.finalMessage();
-    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
-    if (!text) {
-      return res.status(500).json({ error: "Claude (API) не повернув результат. Спробуйте ще раз." });
-    }
-    res.json({ html: stripFences(text) });
+    msg = await stream.finalMessage();
   } catch (e) {
-    res.status(500).json({ error: "Помилка Claude API: " + ((e && e.message) || "невідома помилка") });
+    throw new ProviderError("anthropic_throw");
   }
+  const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+  if (!text) throw new ProviderError("anthropic_empty");
+  return stripFences(text);
 }
 
-// Резервний шлях: формування через `claude -p` на підписці Max (якщо ключа API немає).
-function protocolViaCLI(systemPrompt, raw, res) {
-  const prompt = systemPrompt + "\n\n--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw;
-  const child = spawn("claude", ["-p", "--output-format", "text"], { env: process.env, timeout: 180000 });
-  let out = "";
-  let err = "";
-  child.stdout.on("data", (d) => (out += d));
-  child.stderr.on("data", (d) => (err += d));
-  child.on("error", () => {
-    res.status(500).json({
-      error: "Не вдалося запустити Claude Code. Перевірте: npm i -g @anthropic-ai/claude-code і логін через підписку (команда: claude).",
+// Резервний шлях: `claude -p` на підписці Max. Повертає HTML або кидає ProviderError(code).
+function protocolViaCLI(systemPrompt, raw) {
+  return new Promise((resolve, reject) => {
+    const prompt = systemPrompt + "\n\n--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw;
+    const child = spawn("claude", ["-p", "--output-format", "text"], { env: process.env, timeout: 180000 });
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.on("error", (e) => reject(new ProviderError(e && e.code === "ENOENT" ? "cli_notfound" : "unknown")));
+    child.on("close", (code, signal) => {
+      if (signal === "SIGTERM") return reject(new ProviderError("cli_timeout")); // вбито по таймауту 180с
+      if (code !== 0 || !out.trim()) {
+        // ліміт Max vs інше — за маркером у stderr; сам stderr НЕ логуємо (може містити текст).
+        return reject(new ProviderError(/limit|usage|quota|rate/i.test(err) ? "cli_limit" : "cli_empty"));
+      }
+      resolve(stripFences(out));
     });
+    child.stdin.write(prompt);
+    child.stdin.end();
   });
-  child.on("close", (code) => {
-    if (res.headersSent) return;
-    if (code !== 0 || !out.trim()) {
-      return res.status(500).json({
-        error: "Claude не повернув результат. " + (err.trim() ? "Деталі: " + err.trim().slice(0, 300) : "Можливо, вичерпано ліміт підписки Max — спробуйте пізніше."),
-      });
-    }
-    res.json({ html: stripFences(out) });
-  });
-  child.stdin.write(prompt);
-  child.stdin.end();
 }
 
-app.post("/api/protocol", (req, res) => {
+app.post("/api/protocol", async (req, res) => {
   const raw = (req.body && req.body.text || "").trim();
   if (!raw) {
     return res.status(400).json({ error: "Порожній текст диктовки." });
   }
 
   const user = getAuthUser(req);
+  const uid = (req.body && req.body.uid) || "server";
   const systemPrompt = PROMPTS_BY_USER[user] || SYSTEM_PROMPT;
 
-  if (bedrock) {
-    protocolViaBedrock(systemPrompt, raw, res);
-  } else if (anthropic) {
-    protocolViaAnthropic(systemPrompt, raw, res);
-  } else {
-    protocolViaCLI(systemPrompt, raw, res);
+  // Ланцюг провайдерів: основний → резерв. Кожен збій логуємо з кодом; успіх після збою — fallback:true.
+  const chain = [];
+  if (bedrock) chain.push({ provider: "bedrock", model: BEDROCK_MODEL, run: protocolViaBedrock });
+  if (anthropic) chain.push({ provider: "anthropic", model: "claude-opus-4-8", run: protocolViaAnthropic });
+  chain.push({ provider: "cli", model: "claude-cli-max", run: protocolViaCLI });
+
+  let fallback = false;
+  for (let i = 0; i < chain.length; i++) {
+    const step = chain[i];
+    const t0 = Date.now();
+    try {
+      const html = await step.run(systemPrompt, raw);
+      const ms = Date.now() - t0;
+      logEvent(uid, "generate_ok", Math.round(ms / 1000), user,
+        { provider: step.provider, model: step.model, stage: "generate", ms, fallback });
+      return res.json({ html, ms, provider: step.provider, model: step.model });
+    } catch (e) {
+      const ms = Date.now() - t0;
+      const code = (e && e.code) || "unknown";
+      logEvent(uid, "generate_err", null, user,
+        { provider: step.provider, model: step.model, stage: "generate", code, ms });
+      if (i === chain.length - 1) {
+        return res.status(500).json({ error: ERROR_MESSAGES[code] || ERROR_MESSAGES.unknown });
+      }
+      fallback = true; // наступний провайдер — це вже резерв
+      console.error(`[protocol] провайдер ${step.provider} впав (${code}), резерв на наступний`);
+    }
   }
 });
 

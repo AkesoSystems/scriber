@@ -148,9 +148,9 @@
   // ── Аналітика: лише події і числа, без тексту диктовок ──
   let uid = localStorage.getItem("uzd_uid");
   if (!uid){ uid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("uzd_uid", uid); }
-  function track(event, value){
+  function track(event, value, meta){
     try{ fetch("/api/track", { method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ uid, event, value }) }); }catch(_){}
+      body: JSON.stringify(Object.assign({ uid, event, value }, meta || {})) }); }catch(_){}
   }
   track("visit");
 
@@ -240,6 +240,7 @@
         try{
           const fd = new FormData();
           fd.append("audio", blob, "seg.webm");
+          fd.append("uid", uid);
           const r = await fetch("/api/transcribe", { method: "POST", body: fd });
           const data = await r.json();
           if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); }
@@ -322,25 +323,39 @@
     else if (transcribing) await transcribing;
     if (!finalText.trim()){ setStatus("Немає тексту для протоколу — спершу зробіть запис.", true); return; }
     genBtn.disabled = true;
-    setStatus("Claude формує протокол... зазвичай 15–40 секунд.");
+    setStatus("Формую протокол…");
     track("generate");
-    const t0 = Date.now();
+    const t0 = performance.now();
+    // живий секундомір генерації (десяті секунди)
+    timerEl.textContent = "генерація 0,0 с";
+    let genTimer = setInterval(() => {
+      timerEl.textContent = "генерація " + ((performance.now() - t0) / 1000).toFixed(1).replace(".", ",") + " с";
+    }, 100);
+    let gotResponse = false;
     try{
       const r = await fetch("/api/protocol", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text: finalText })
+        body: JSON.stringify({ text: finalText, uid })
       });
+      gotResponse = true;
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || "Помилка сервера");
-      track("generate_ok", Math.round((Date.now() - t0) / 1000));
+      clearInterval(genTimer); genTimer = null;
+      // generate_ok логує СЕРВЕР (з provider/ms). Тут лише показуємо чистий серверний час, якщо є.
+      const secs = (typeof data.ms === "number" ? data.ms : (performance.now() - t0)) / 1000;
+      timerEl.textContent = "протокол за " + secs.toFixed(1).replace(".", ",") + " с"
+        + (data.provider ? " · " + data.provider : "");
       doc.innerHTML = data.html.replace(/\[\?\]/g, '<span class="flag">[?]</span>');
       const flags = doc.querySelectorAll(".flag").length;
       setStatus(flags
         ? "Протокол готовий. Перевірте " + flags + " позначених місць [?] перед збереженням."
         : "Протокол готовий. Перегляньте та відредагуйте за потреби.");
     }catch(err){
-      track("generate_err");
+      if (genTimer){ clearInterval(genTimer); genTimer = null; }
+      timerEl.textContent = "";
+      // generate_err логує СЕРВЕР; клієнт фіксує лише мережевий збій (сервер запит не бачив).
+      if (!gotResponse) track("generate_err", null, { code: "network" });
       setStatus(err.message, true);
     }finally{
       genBtn.disabled = !finalText.trim();

@@ -38,6 +38,14 @@
   .bar .c{background:#E5C57B;}
   .legend{font-size:13px;color:var(--muted);margin-top:8px;}
   .err{color:#B3372F;}
+  tr.warn{background:#FFF6E6;}
+  tr.bad{background:#FBEAE8;}
+  .minibars{max-width:560px;}
+  .minibar{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px;}
+  .minibar .lbl{width:140px;color:var(--muted);}
+  .minibar .track{flex:1;background:#EEF2F4;border-radius:5px;height:18px;overflow:hidden;border:1px solid var(--line);}
+  .minibar .fill{height:100%;background:#B3372F;}
+  .minibar .n{width:42px;text-align:right;font-variant-numeric:tabular-nums;}
   @media(max-width:700px){
     .wrap{padding:14px;}
     .usersel{margin-left:0;width:100%;}
@@ -62,6 +70,21 @@
   <h2>Експорти: Word vs PDF vs Копіювання</h2>
   <div class="bar" id="bar"><div class="w"></div><div class="p"></div><div class="c"></div></div>
   <div class="legend" id="barLegend"></div>
+
+  <h2>Кому написати <span style="text-transform:none;font-weight:400">(залученість — найбільш «затихлі» вгорі)</span></h2>
+  <table id="engTable">
+    <thead><tr><th>Лікар</th><th>Останній день</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th></tr></thead>
+    <tbody id="engBody"></tbody>
+  </table>
+
+  <h2>Помилки (генерація + транскрипція)</h2>
+  <p class="legend" id="errHead"></p>
+  <div class="legend" style="margin-top:10px">За кодом</div>
+  <div id="errByCode" class="minibars"></div>
+  <div class="legend" style="margin-top:14px">За провайдером</div>
+  <div id="errByProvider" class="minibars"></div>
+  <div class="legend" style="margin-top:14px">За стадією</div>
+  <div id="errByStage" class="minibars"></div>
 
   <h2 id="usersTitle">По користувачах <span style="text-transform:none;font-weight:400">(клік по рядку — детальніше)</span></h2>
   <table id="usersTable">
@@ -118,7 +141,7 @@ function load(user){
       ["Записів диктовки", d.recordings, "середня тривалість: " + fmtSec(d.avgRecordingSec)],
       ["Протоколів сформовано", d.protocolsGenerated, "середній час генерації: " + fmtSec(d.avgGenerateSec)],
       ["Оцінка якості", rating, ratingSub],
-      ["Помилок генерації", d.generateErrors, d.generateErrors ? "дивіться pm2 logs uzd" : "усе чисто"],
+      ["Помилок генерації", d.generateErrors, d.generateErrors ? "розбивка за кодом нижче ↓" : "усе чисто"],
       ["Експортів усього", totalExp, "Word: " + d.exports.word + " · PDF: " + d.exports.pdf + " · Копі: " + d.exports.copy],
     ];
     document.getElementById("cards").innerHTML = cards.map(c =>
@@ -155,6 +178,37 @@ function load(user){
           return "<tr><td>" + k + "</td><td>" + v.visits + "</td><td>" + v.recordings +
                  "</td><td>" + v.protocols + "</td><td>" + v.exports + "</td></tr>"; }).join("")
       : '<tr><td colspan="5" style="color:#9AA7AE">Даних ще немає — зайдіть у застосунок і зробіть тестовий протокол.</td></tr>';
+
+    // Залученість «кому написати»
+    const eng = d.engagement || [];
+    document.getElementById("engBody").innerHTML = eng.length
+      ? eng.map(e => {
+          const cls = e.daysSinceActive === null ? "" : (e.daysSinceActive >= 7 ? "bad" : (e.daysSinceActive >= 3 ? "warn" : ""));
+          const last = e.lastActiveDay || "—";
+          const dsa = e.daysSinceActive === null ? "—" : e.daysSinceActive;
+          const rate = e.avgRating != null ? "★ " + e.avgRating : "—";
+          return '<tr class="' + cls + '"><td><b>' + e.user + "</b></td><td>" + last +
+                 "</td><td>" + dsa + "</td><td>" + e.protocols7d + "</td><td>" + e.protocols30d +
+                 "</td><td>" + e.activeDaysStreak + "</td><td>" + rate + "</td><td>" + e.errorRate + "%</td></tr>";
+        }).join("")
+      : '<tr><td colspan="8" style="color:#9AA7AE">Даних ще немає.</td></tr>';
+
+    // Помилки: заголовок + три розбивки міні-барами
+    const errs = d.errors || { byCode:{}, byProvider:{}, byStage:{}, total:0, errorRate:0 };
+    document.getElementById("errHead").innerHTML =
+      "Усього збоїв генерації: <b>" + errs.total + "</b> · частка помилок генерації: <b>" + errs.errorRate + "%</b>";
+    function errBars(obj, elId){
+      const entries = Object.entries(obj || {}).sort((a,b)=>b[1]-a[1]);
+      const max = entries.reduce((m,x)=>Math.max(m,x[1]),0) || 1;
+      document.getElementById(elId).innerHTML = entries.length
+        ? entries.map(([k,v]) =>
+            '<div class="minibar"><span class="lbl">' + k + '</span><span class="track"><span class="fill" style="width:' +
+            Math.round(v/max*100) + '%"></span></span><span class="n">' + v + '</span></div>').join("")
+        : '<div class="legend" style="color:#9AA7AE">— немає</div>';
+    }
+    errBars(errs.byCode, "errByCode");
+    errBars(errs.byProvider, "errByProvider");
+    errBars(errs.byStage, "errByStage");
   }).catch(e => {
     document.getElementById("cards").innerHTML =
       '<div class="card"><div class="label">Помилка</div><div class="sub">' + e.message +
