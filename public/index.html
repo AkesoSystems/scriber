@@ -117,7 +117,7 @@
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
     </div>
     <div class="hint">Натисніть «Почати запис», диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
-      У Chrome/Edge текст видно наживо під час диктовки; після «Зупинити запис» він автоматично уточнюється (Whisper).
+      Текст з'являється блоками під час диктовки і автоматично уточнюється після «Зупинити запис».
       Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
   </section>
 
@@ -161,20 +161,21 @@
   const docBtn = document.getElementById("docBtn");
   const pdfBtn = document.getElementById("pdfBtn");
 
-  let finalText = "";        // підтверджений текст (з Whisper) — іде в протокол
-  let liveText = "";         // живий прев'ю поточного запису (Web Speech), замінюється Whisper'ом
+  let finalText = "";        // підтверджений текст (повний Whisper-прохід) — іде в протокол
+  let liveText = "";         // живий прев'ю: накопичені сегменти Whisper під час диктовки
   let recording = false;
-  let mediaRec = null;
+  let mediaRec = null;       // безперервний запис — для точного фінального проходу
   let micStream = null;
   let chunks = [];
-  let sr = null;             // Web Speech — лише для динамічного прев'ю під час диктовки
-  let transcribing = null;   // проміс, поки триває розпізнавання після «Зупинити»
+  let segRec = null;         // окремий рекордер для коротких сегментів живого прев'ю
+  let segChunks = [];
+  let segTimer = null;
+  let acceptLive = false;    // чи приймати ще сегменти (вимикаємо на «Зупинити»)
+  let transcribing = null;   // проміс, поки триває фінальне розпізнавання після «Зупинити»
   let recStartedAt = 0;
   let stickToBottom = true;
 
-  // Web Speech показує слова наживо під час диктовки (Chrome/Edge). У Safari його нема —
-  // там просто не буде живого прев'ю, але фінальний текст усе одно дасть Whisper.
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const SEG_MS = 8000;       // довжина сегмента живого прев'ю (~8 с)
 
   // Якщо людина прокрутила вгору — не смикаємо екран; повернулась донизу — знову автоскрол
   screen.addEventListener("scroll", () => {
@@ -213,30 +214,36 @@
     return "";
   }
 
-  // Живий прев'ю через Web Speech: показує слова динамічно під час диктовки.
-  // Це лише візуальний прев'ю — авторитетний текст дасть Whisper після «Зупинити».
-  function startLivePreview(){
-    if (!SR) return; // напр. Safari — без живого прев'ю
-    try{
-      sr = new SR();
-      sr.lang = "uk-UA";
-      sr.continuous = true;
-      sr.interimResults = true;
-      sr.onresult = (e) => {
-        let interim = "";
-        for (let i = e.resultIndex; i < e.results.length; i++){
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) liveText += t + " ";
-          else interim += t;
+  // Живий прев'ю через Groq: пишемо короткими сегментами (~8 с), кожен одразу
+  // транскрибуємо й дописуємо. Працює в усіх браузерах (зокрема Safari). Це прев'ю —
+  // на «Зупинити» весь запис ще раз проганяється цілком для максимальної точності.
+  function startSegment(){
+    if (!micStream) return;
+    segChunks = [];
+    const mime = pickMime();
+    segRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+    segRec.ondataavailable = (e) => { if (e.data && e.data.size) segChunks.push(e.data); };
+    segRec.onstop = async () => {
+      const blob = new Blob(segChunks, { type: (segRec && segRec.mimeType) || "audio/webm" });
+      if (recording) startSegment();         // одразу наступний сегмент, щоб не губити мову
+      if (!acceptLive || !blob.size) return; // після «Зупинити» сегменти ігноруємо
+      try{
+        const fd = new FormData();
+        fd.append("audio", blob, "seg.webm");
+        const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+        const data = await r.json();
+        if (acceptLive && r.ok && data.text){
+          liveText += (liveText ? " " : "") + data.text.trim();
+          render("");
         }
-        if (recording) render(interim);
-      };
-      sr.onend = () => { if (recording) { try{ sr.start(); }catch(_){} } }; // автоперезапуск
-      sr.start();
-    }catch(_){ sr = null; }
+      }catch(_){ /* сегмент-прев'ю не критичний — фінал все одно дасть точний текст */ }
+    };
+    segRec.start();
   }
-  function stopLivePreview(){
-    if (sr){ try{ sr.onend = null; sr.stop(); }catch(_){} sr = null; }
+  function stopSegments(){
+    if (segTimer){ clearInterval(segTimer); segTimer = null; }
+    if (segRec && segRec.state === "recording"){ try{ segRec.stop(); }catch(_){} }
+    segRec = null;
   }
 
   async function startRec(){
@@ -248,11 +255,15 @@
     }
     chunks = [];
     liveText = "";
+    acceptLive = true;
     const mime = pickMime();
     mediaRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
     mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    mediaRec.start();
-    startLivePreview(); // динамічний текст на екрані під час диктовки
+    mediaRec.start();                                  // безперервний запис для точного фіналу
+    startSegment();                                    // перший сегмент живого прев'ю
+    segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле
+      if (segRec && segRec.state === "recording"){ try{ segRec.stop(); }catch(_){} }
+    }, SEG_MS);
     recording = true;
     recStartedAt = Date.now();
     track("rec_start");
@@ -270,7 +281,8 @@
     if (recStartedAt){ track("rec_stop", Math.round((Date.now() - recStartedAt) / 1000)); recStartedAt = 0; }
     recBtn.classList.remove("recording");
     recBtn.innerHTML = '<span class="dot"></span>Почати запис';
-    stopLivePreview();
+    acceptLive = false; // більше не приймаємо живі сегменти — далі точний фінальний прохід
+    stopSegments();
     render(""); // показати накопичену чернетку, поки чекаємо точний текст від Whisper
 
     transcribing = new Promise((resolve) => {
