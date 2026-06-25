@@ -46,6 +46,24 @@
   .minibar .track{flex:1;background:#EEF2F4;border-radius:5px;height:18px;overflow:hidden;border:1px solid var(--line);}
   .minibar .fill{height:100%;background:#B3372F;}
   .minibar .n{width:42px;text-align:right;font-variant-numeric:tabular-nums;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 18px;}
+  .btn{font-family:var(--sans);font-size:13.5px;font-weight:600;padding:9px 14px;border-radius:8px;
+    border:1px solid var(--line);background:var(--paper);color:var(--teal-dark);cursor:pointer;}
+  .btn:hover{background:#F2F7F6;}
+  .btn:disabled{opacity:.55;cursor:default;}
+  .btn.primary{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .btn.primary:hover{background:var(--teal-dark);}
+  .banner{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--teal);
+    border-radius:10px;padding:14px 18px;margin:0 0 18px;font-size:14.5px;line-height:1.55;}
+  .banner b{color:var(--teal-dark);}
+  .hint{font-size:13px;color:var(--muted);margin:0 0 10px;line-height:1.5;}
+  .aipanel{background:var(--paper);border:1px solid var(--line);border-left:4px solid #7A5CC4;
+    border-radius:10px;padding:16px 18px;margin:0 0 18px;font-size:14px;line-height:1.6;
+    white-space:pre-wrap;display:none;}
+  .aipanel.show{display:block;}
+  .aipanel h3{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .dot2{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin:0 4px 0 8px;}
+  .dot2.amber{background:#E5B84B;} .dot2.red{background:#D9534F;}
   @media(max-width:700px){
     .wrap{padding:14px;}
     .usersel{margin-left:0;width:100%;}
@@ -65,34 +83,51 @@
 </header>
 <div class="wrap">
   <p class="scope" id="scope"></p>
+
+  <div class="toolbar">
+    <button class="btn primary" id="btnCopy">📋 Скопіювати все для AI</button>
+    <button class="btn" id="btnJson">⬇ Завантажити JSON</button>
+    <button class="btn" id="btnReload">↻ Оновити</button>
+  </div>
+  <p class="hint" style="margin-top:-8px">«Скопіювати все для AI» кладе у буфер готове текстове зведення — вставте його в чат з AI, щоб запитати про поточну ситуацію. «Завантажити JSON» — повні сирі дані.</p>
+
+  <div class="banner" id="banner">Завантаження…</div>
+  <div class="aipanel" id="aiPanel"></div>
+
   <div class="cards" id="cards"></div>
 
-  <h2>Експорти: Word vs PDF vs Копіювання</h2>
-  <div class="bar" id="bar"><div class="w"></div><div class="p"></div><div class="c"></div></div>
-  <div class="legend" id="barLegend"></div>
-
-  <h2>Кому написати <span style="text-transform:none;font-weight:400">(залученість — найбільш «затихлі» вгорі)</span></h2>
+  <h2>Кому написати <span style="text-transform:none;font-weight:400">(найбільш «затихлі» вгорі)</span></h2>
+  <p class="hint">Хто давно не користувався або має багато помилок — кандидати «написати й спитати як воно».
+    <span class="dot2 amber"></span>3+ дн тиші <span class="dot2 red"></span>7+ дн.
+    «Серія днів» — скільки днів поспіль робив протоколи. «Днів тиша» — скільки днів від останнього протоколу.</p>
   <table id="engTable">
-    <thead><tr><th>Лікар</th><th>Останній день</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th></tr></thead>
+    <thead><tr><th>Лікар</th><th>Останній протокол</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th></tr></thead>
     <tbody id="engBody"></tbody>
   </table>
 
-  <h2>Помилки (генерація + транскрипція)</h2>
+  <h2>Чому падало створення протоколу</h2>
+  <p class="hint">Збої згруповані за кодом помилки, провайдером (Bedrock/Claude API/CLE) і стадією (генерація чи транскрипція). Якщо тут густо — дивись який саме шар підводить.</p>
   <p class="legend" id="errHead"></p>
-  <div class="legend" style="margin-top:10px">За кодом</div>
+  <div class="legend" style="margin-top:10px">За кодом помилки</div>
   <div id="errByCode" class="minibars"></div>
   <div class="legend" style="margin-top:14px">За провайдером</div>
   <div id="errByProvider" class="minibars"></div>
   <div class="legend" style="margin-top:14px">За стадією</div>
   <div id="errByStage" class="minibars"></div>
 
-  <h2 id="usersTitle">По користувачах <span style="text-transform:none;font-weight:400">(клік по рядку — детальніше)</span></h2>
+  <h2>Експорти: Word vs PDF vs Копіювання</h2>
+  <p class="hint">У якому форматі лікарі зберігають готовий протокол.</p>
+  <div class="bar" id="bar"><div class="w"></div><div class="p"></div><div class="c"></div></div>
+  <div class="legend" id="barLegend"></div>
+
+  <h2 id="usersTitle">По користувачах <span style="text-transform:none;font-weight:400">(клік по рядку — фільтр на цього лікаря)</span></h2>
   <table id="usersTable">
     <thead><tr><th>Логін</th><th>Візити</th><th>Записи</th><th>Серед. запис</th><th>Протоколи</th><th>Помилки</th><th>Експорти</th><th>Оцінка</th></tr></thead>
     <tbody id="usersBody"></tbody>
   </table>
 
   <h2>По днях</h2>
+  <p class="hint">Динаміка по днях (Київський час). Корисно бачити, чи зростає користування.</p>
   <table>
     <thead><tr><th>Дата</th><th>Візити</th><th>Записи</th><th>Протоколи</th><th>Експорти</th></tr></thead>
     <tbody id="daysBody"></tbody>
@@ -102,11 +137,108 @@
 const KEY = new URLSearchParams(location.search).get("key") || "";
 const sel = document.getElementById("userSel");
 let usersLoaded = false;
+let lastData = null;
+
+// Людські назви кодів/провайдерів/стадій для дашборду (на сервері — короткі enum).
+const CODE_LABELS = {
+  groq_badkey:"Groq: немає ключа", groq_empty:"Groq: порожнє аудіо", groq_500:"Groq: помилка API", groq_network:"Groq: мережа",
+  bedrock_throttle:"Bedrock: ліміт запитів", bedrock_empty:"Bedrock: порожній вивід", bedrock_timeout:"Bedrock: таймаут", bedrock_throw:"Bedrock: збій",
+  anthropic_empty:"Claude API: порожньо", anthropic_throw:"Claude API: збій",
+  cli_timeout:"CLI: таймаут 180с", cli_limit:"CLI: ліміт Max", cli_notfound:"CLI: не запустився", cli_empty:"CLI: порожньо",
+  no_provider:"Нема провайдера", network:"Мережа клієнта", unknown:"Інше",
+};
+const PROVIDER_LABELS = { bedrock:"Bedrock (Nova Pro)", anthropic:"Claude API", cli:"CLI (Max)" };
+const STAGE_LABELS = { generate:"Генерація", transcribe:"Транскрипція" };
 
 function fmtSec(s){
   if (!s) return "0 с";
   return s >= 60 ? Math.floor(s/60) + " хв " + (s%60) + " с" : s + " с";
 }
+
+function esc(s){ return String(s).replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c])); }
+
+// Банер простою мовою — поточна ситуація одним абзацом.
+function renderBanner(d){
+  const eng = d.engagement || [];
+  const active7 = eng.filter(e => e.protocols7d > 0).length;
+  const stale = eng.filter(e => e.daysSinceActive != null && e.daysSinceActive >= 3); // eng вже сорт за тишею спадно
+  let html = "<b>" + d.protocolsGenerated + "</b> протоколів усього · <b>" + active7 + "</b> активних за 7 днів · "
+    + "помилок <b>" + d.generateErrors + "</b> (" + (d.errors ? d.errors.errorRate : 0) + "%) · сер. час <b>" + fmtSec(d.avgGenerateSec) + "</b>";
+  if (stale.length){
+    const t = stale[0];
+    html += "<br>⚠ Найдовша тиша: <b>" + esc(t.user) + "</b> — " + t.daysSinceActive + " дн без протоколів.";
+    if (stale.length > 1) html += " Усього затихлих (3+ дн): <b>" + stale.length + "</b>.";
+  } else if (eng.length){
+    html += "<br>✓ Усі лікарі активні за останні 3 дні.";
+  }
+  document.getElementById("banner").innerHTML = html;
+}
+
+// Компактне зведення для AI (markdown, без PHI) — для кнопок «Скопіювати для AI» та «AI-аналіз».
+function buildDigest(d){
+  const L = [];
+  L.push("# Scriber — зведення метрик (україномовний УЗД-диктофон; дані агреговані, без даних пацієнтів)");
+  L.push("Охоплення: " + (d.filteredBy ? ("користувач " + d.filteredBy) : "усі користувачі"));
+  L.push("");
+  L.push("## Загальне");
+  L.push("- Протоколів сформовано: " + d.protocolsGenerated + " (сер. час " + fmtSec(d.avgGenerateSec) + ")");
+  L.push("- Помилок генерації: " + d.generateErrors + " (частка " + (d.errors ? d.errors.errorRate : 0) + "%)");
+  L.push("- Записів диктовки: " + d.recordings + " (сер. " + fmtSec(d.avgRecordingSec) + ")");
+  L.push("- Візити: " + d.visits + " · унікальних пристроїв: " + d.uniqueDevices);
+  L.push("- Оцінка якості: " + (d.rating && d.rating.count ? (d.rating.avg + "/5 за " + d.rating.count + " оцінок") : "ще немає"));
+  L.push("- Експорти: Word " + d.exports.word + " · PDF " + d.exports.pdf + " · Копіювання " + d.exports.copy);
+  L.push("");
+  L.push("## Залученість по лікарях (хто коли востаннє робив протокол)");
+  (d.engagement || []).forEach(e => {
+    L.push("- " + e.user + ": остання активність " + (e.lastActiveDay || "ніколи")
+      + (e.daysSinceActive != null ? (" (" + e.daysSinceActive + " дн тому)") : "")
+      + ", протоколів 7д=" + e.protocols7d + ", 30д=" + e.protocols30d
+      + ", серія днів=" + e.activeDaysStreak
+      + ", оцінка=" + (e.avgRating != null ? e.avgRating : "—")
+      + ", помилки=" + e.errorRate + "%");
+  });
+  const errs = d.errors || { byCode:{}, byProvider:{}, byStage:{} };
+  const kv = (o) => Object.entries(o).map(([k,v]) => k + "=" + v).join(", ") || "немає";
+  L.push("");
+  L.push("## Помилки");
+  L.push("- За кодом: " + kv(errs.byCode));
+  L.push("- За провайдером: " + kv(errs.byProvider));
+  L.push("- За стадією: " + kv(errs.byStage));
+  L.push("");
+  L.push("## По днях (останні 14, Київський час)");
+  Object.keys(d.byDay || {}).sort().reverse().slice(0, 14).forEach(k => {
+    const v = d.byDay[k];
+    L.push("- " + k + ": протоколи=" + v.protocols + ", записи=" + v.recordings + ", візити=" + v.visits + ", експорти=" + v.exports);
+  });
+  return L.join("\n");
+}
+
+function showPanel(title, body){
+  const p = document.getElementById("aiPanel");
+  p.innerHTML = "<h3>" + esc(title) + "</h3>" + esc(body);
+  p.classList.add("show");
+  p.scrollIntoView({ behavior:"smooth", block:"nearest" });
+}
+
+function copyForAI(){
+  if (!lastData) return;
+  const text = buildDigest(lastData);
+  const btn = document.getElementById("btnCopy");
+  navigator.clipboard.writeText(text).then(() => {
+    const t = btn.textContent; btn.textContent = "✓ Скопійовано"; setTimeout(() => btn.textContent = t, 1500);
+  }).catch(() => showPanel("Зведення для AI (скопіюйте вручну)", text));
+}
+
+function downloadJSON(){
+  if (!lastData) return;
+  const blob = new Blob([JSON.stringify(lastData, null, 2)], { type:"application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "scriber-stats-" + new Date().toISOString().slice(0,10) + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
 
 function load(user){
   const q = "/api/stats?key=" + encodeURIComponent(KEY) + (user ? "&user=" + encodeURIComponent(user) : "");
@@ -114,6 +246,8 @@ function load(user){
     if (!r.ok) throw new Error("Невірний ключ доступу");
     return r.json();
   }).then(d => {
+    lastData = d;
+    renderBanner(d);
     // селектор користувачів наповнюємо один раз
     if (!usersLoaded){
       d.users.forEach(u => {
@@ -197,18 +331,18 @@ function load(user){
     const errs = d.errors || { byCode:{}, byProvider:{}, byStage:{}, total:0, errorRate:0 };
     document.getElementById("errHead").innerHTML =
       "Усього збоїв генерації: <b>" + errs.total + "</b> · частка помилок генерації: <b>" + errs.errorRate + "%</b>";
-    function errBars(obj, elId){
+    function errBars(obj, elId, labels){
       const entries = Object.entries(obj || {}).sort((a,b)=>b[1]-a[1]);
       const max = entries.reduce((m,x)=>Math.max(m,x[1]),0) || 1;
       document.getElementById(elId).innerHTML = entries.length
         ? entries.map(([k,v]) =>
-            '<div class="minibar"><span class="lbl">' + k + '</span><span class="track"><span class="fill" style="width:' +
+            '<div class="minibar"><span class="lbl">' + esc((labels && labels[k]) || k) + '</span><span class="track"><span class="fill" style="width:' +
             Math.round(v/max*100) + '%"></span></span><span class="n">' + v + '</span></div>').join("")
         : '<div class="legend" style="color:#9AA7AE">— немає</div>';
     }
-    errBars(errs.byCode, "errByCode");
-    errBars(errs.byProvider, "errByProvider");
-    errBars(errs.byStage, "errByStage");
+    errBars(errs.byCode, "errByCode", CODE_LABELS);
+    errBars(errs.byProvider, "errByProvider", PROVIDER_LABELS);
+    errBars(errs.byStage, "errByStage", STAGE_LABELS);
   }).catch(e => {
     document.getElementById("cards").innerHTML =
       '<div class="card"><div class="label">Помилка</div><div class="sub">' + e.message +
@@ -217,6 +351,9 @@ function load(user){
 }
 
 sel.addEventListener("change", () => load(sel.value));
+document.getElementById("btnCopy").addEventListener("click", copyForAI);
+document.getElementById("btnJson").addEventListener("click", downloadJSON);
+document.getElementById("btnReload").addEventListener("click", () => load(sel.value));
 document.getElementById("usersBody").addEventListener("click", (e) => {
   const tr = e.target.closest("tr.clickable");
   if (!tr) return;
