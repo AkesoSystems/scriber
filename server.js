@@ -3,6 +3,7 @@
 // авторизований через вашу підписку Claude Max. Жодних API-ключів.
 
 const express = require("express");
+const multer = require("multer");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -38,7 +39,7 @@ const ADMIN_KEY = process.env.ADMIN_KEY || "admtest";
 
 const ANALYTICS_FILE = path.join(__dirname, "analytics.jsonl");
 const ALLOWED_EVENTS = new Set([
-  "visit", "rec_start", "rec_stop",
+  "visit", "rec_start", "rec_stop", "transcribe",
   "generate", "generate_ok", "generate_err",
   "export_word", "export_pdf", "export_copy", "rating",
 ]);
@@ -334,6 +335,61 @@ const PROMPTS_BY_USER = {
   test3: SYSTEM_PROMPT_TESTER3,
   test4: SYSTEM_PROMPT_TESTER4,
 };
+
+// ───────────────────────── Транскрипція (Whisper через Groq) ─────────────────────────
+// Приймає аудіо (multipart, поле "audio") від будь-якого клієнта — веб, PWA, майбутній
+// десктоп — і повертає розпізнаний текст. Модель large-v3 обробляє весь запис із
+// контекстом, тому добре ловить швидку мову й медтерміни. Текст аудіо НІКОЛИ не логуємо.
+const uploadAudio = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 26 * 1024 * 1024 }, // ~25 МБ — ліміт файлу Groq
+});
+
+// Підказка-словник для Whisper: задає домен (УЗД) і написання термінів — підвищує точність.
+const UZD_PROMPT = [
+  "Протокол ультразвукового дослідження (УЗД).",
+  "Терміни: ехогенність, ехоструктура, паренхіма, контури, капсула, кровоток, доплер,",
+  "печінка, жовчний міхур, підшлункова залоза, селезінка, нирки, сечовий міхур,",
+  "щитоподібна залоза, перешийок, вузол, лімфовузли, ехокардіографія, передсердя,",
+  "шлуночок, мітральний клапан, тристулковий клапан, аорта, легенева артерія,",
+  "фракція викиду, градієнт, регургітація. Розміри в міліметрах і сантиметрах.",
+].join(" ");
+
+app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
+  if (!process.env.GROQ_API_KEY) {
+    return res.status(500).json({ error: "Транскрипція не налаштована: відсутній GROQ_API_KEY на сервері." });
+  }
+  if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+    return res.status(400).json({ error: "Порожній аудіофайл." });
+  }
+
+  try {
+    const form = new FormData();
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || "audio/webm" });
+    form.append("file", blob, req.file.originalname || "audio.webm");
+    form.append("model", "whisper-large-v3");
+    form.append("language", "uk");
+    form.append("prompt", UZD_PROMPT);
+    form.append("temperature", "0");
+    form.append("response_format", "json");
+
+    const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: form,
+    });
+
+    if (!r.ok) {
+      const detail = (await r.text().catch(() => "")).slice(0, 300);
+      return res.status(502).json({ error: "Помилка розпізнавання (Groq)." + (detail ? " Деталі: " + detail : "") });
+    }
+
+    const data = await r.json();
+    res.json({ text: (data.text || "").trim() });
+  } catch (err) {
+    res.status(500).json({ error: "Не вдалося розпізнати аудіо: " + (err.message || "невідома помилка") });
+  }
+});
 
 app.post("/api/protocol", (req, res) => {
   const raw = (req.body && req.body.text || "").trim();

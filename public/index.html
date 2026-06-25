@@ -116,8 +116,9 @@
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
     </div>
-    <div class="hint">Працює у Chrome або Edge. Диктуйте українською; цифри й розміри називайте чітко
-      («сто сорок два міліметри»). Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
+    <div class="hint">Працює у Chrome, Safari та Edge (зокрема на iPhone). Натисніть «Почати запис», диктуйте українською;
+      цифри й розміри називайте чітко («сто сорок два міліметри»). Текст зʼявиться через кілька секунд після «Зупинити запис».
+      Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
   </section>
 
   <section class="panel doc-panel">
@@ -162,7 +163,10 @@
 
   let finalText = "";
   let recording = false;
-  let rec = null;
+  let mediaRec = null;
+  let micStream = null;
+  let chunks = [];
+  let transcribing = null; // проміс, поки триває розпізнавання після «Зупинити»
   let recStartedAt = 0;
   let stickToBottom = true;
 
@@ -171,9 +175,9 @@
     stickToBottom = screen.scrollTop + screen.clientHeight >= screen.scrollHeight - 40;
   });
 
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    setStatus("Цей браузер не підтримує розпізнавання мовлення. Відкрийте сторінку у Chrome або Edge.", true);
+  const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  if (!canRecord) {
+    setStatus("Цей браузер не підтримує запис аудіо. Оновіть браузер (Chrome, Safari, Edge).", true);
     recBtn.disabled = true;
   }
 
@@ -195,28 +199,25 @@
     genBtn.disabled = !finalText.trim();
   }
 
-  function startRec(){
-    rec = new SR();
-    rec.lang = "uk-UA";
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++){
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += t + " ";
-        else interim += t;
-      }
-      render(interim);
-    };
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed") {
-        setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
-        stopRec();
-      }
-    };
-    rec.onend = () => { if (recording) rec.start(); }; // автоперезапуск
-    rec.start();
+  // Найкращий підтримуваний формат запису (opus компактний; Safari віддає mp4).
+  function pickMime(){
+    const opts = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
+    for (const m of opts){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
+    return "";
+  }
+
+  async function startRec(){
+    try{
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }catch(_){
+      setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
+      return;
+    }
+    chunks = [];
+    const mime = pickMime();
+    mediaRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+    mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mediaRec.start();
     recording = true;
     recStartedAt = Date.now();
     track("rec_start");
@@ -225,14 +226,45 @@
     setStatus("Йде запис — диктуйте.");
   }
 
+  // Зупиняє запис і розпізнає аудіо через Whisper. Повертає проміс, що
+  // резолвиться, коли finalText оновлено (щоб «Сформувати» міг дочекатись).
   function stopRec(){
+    if (!recording) return transcribing || Promise.resolve();
     recording = false;
     if (recStartedAt){ track("rec_stop", Math.round((Date.now() - recStartedAt) / 1000)); recStartedAt = 0; }
-    if (rec) try{ rec.stop(); }catch(_){}
     recBtn.classList.remove("recording");
     recBtn.innerHTML = '<span class="dot"></span>Почати запис';
-    setStatus("");
-    render("");
+
+    transcribing = new Promise((resolve) => {
+      if (!mediaRec){ resolve(); return; }
+      mediaRec.onstop = async () => {
+        if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+        const blob = new Blob(chunks, { type: (mediaRec && mediaRec.mimeType) || "audio/webm" });
+        if (!blob.size){ setStatus("Запис порожній — спробуйте ще раз.", true); resolve(); return; }
+        try{
+          setStatus("Розпізнаю мовлення…");
+          const t0 = Date.now();
+          const fd = new FormData();
+          fd.append("audio", blob, "audio.webm");
+          const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error || "Помилка розпізнавання");
+          track("transcribe", Math.round((Date.now() - t0) / 1000));
+          const text = (data.text || "").trim();
+          if (text) finalText += (finalText ? " " : "") + text;
+          render("");
+          setStatus(finalText.trim()
+            ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
+            : "Нічого не розпізнано — спробуйте ще раз.", !finalText.trim());
+        }catch(err){
+          setStatus(err.message || "Помилка розпізнавання", true);
+        }finally{
+          resolve();
+        }
+      };
+      try{ mediaRec.stop(); }catch(_){ resolve(); }
+    });
+    return transcribing;
   }
 
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
@@ -242,7 +274,9 @@
   });
 
   genBtn.addEventListener("click", async () => {
-    if (recording) stopRec();
+    if (recording) await stopRec();      // зупинити запис і дочекатись розпізнавання
+    else if (transcribing) await transcribing;
+    if (!finalText.trim()){ setStatus("Немає тексту для протоколу — спершу зробіть запис.", true); return; }
     genBtn.disabled = true;
     setStatus("Claude формує протокол... зазвичай 15–40 секунд.");
     track("generate");
