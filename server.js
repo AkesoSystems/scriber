@@ -5,6 +5,7 @@
 const express = require("express");
 const multer = require("multer");
 const Anthropic = require("@anthropic-ai/sdk");
+const { AnthropicBedrockMantle } = require("@anthropic-ai/bedrock-sdk");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -397,15 +398,21 @@ function stripFences(s) {
   return s.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "");
 }
 
-// Клієнт Anthropic API — створюється лише якщо заданий ключ (інакше працює fallback на CLI).
-const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+// Клієнт для формування протоколу. Пріоритет: AWS Bedrock (оплата AWS-кредитами),
+// далі Anthropic API (якщо заданий ключ), інакше null → fallback на `claude -p` (Max).
+// Bedrock вмикається наявністю AWS_REGION (+ AWS-креди беруться зі стандартного ланцюга).
+const apiClient = process.env.AWS_REGION
+  ? new AnthropicBedrockMantle({ awsRegion: process.env.AWS_REGION })
+  : (process.env.ANTHROPIC_API_KEY ? new Anthropic() : null);
+// Bedrock-моделі мають префікс `anthropic.`; перший-партійне API — без нього.
+const apiModel = process.env.AWS_REGION ? "anthropic.claude-opus-4-8" : "claude-opus-4-8";
 
-// Формування протоколу через Claude API (Opus 4.8). Без лімітів підписки Max,
+// Формування протоколу через Claude API/Bedrock (Opus 4.8). Без лімітів підписки Max,
 // швидко й надійно на довгих обстеженнях. Стрімінг — щоб не впертись у таймаут.
 async function protocolViaAPI(systemPrompt, raw, res) {
   try {
-    const stream = anthropic.messages.stream({
-      model: "claude-opus-4-8",
+    const stream = apiClient.messages.stream({
+      model: apiModel,
       max_tokens: 8000,
       output_config: { effort: "low" }, // задача — структурування, не глибокі міркування
       system: systemPrompt,
@@ -461,7 +468,7 @@ app.post("/api/protocol", (req, res) => {
   const user = getAuthUser(req);
   const systemPrompt = PROMPTS_BY_USER[user] || SYSTEM_PROMPT;
 
-  if (anthropic) {
+  if (apiClient) {
     protocolViaAPI(systemPrompt, raw, res);
   } else {
     protocolViaCLI(systemPrompt, raw, res);
