@@ -202,12 +202,11 @@ app.get("/api/stats", (req, res) => {
         if (r.value) { sum.recSecTotal += r.value; u.recSec += r.value; } break;
       case "generate": sum.gen++; break;
       case "generate_ok":
-        // Рахуємо лише СЕРВЕРНІ generate_ok (мають provider) — щоб не подвоювати з історичними клієнтськими.
-        if (r.provider) {
-          sum.genOk++; days[d].protocols++; u.protocols++; ud.protocols++;
-          if (typeof r.ms === "number") { sum.genMsTotal += r.ms; sum.genMsCount++; }
-          else if (r.value) sum.genSecTotal += r.value;
-        }
+        // Рахуємо ВСІ generate_ok: історичні (старий клієнт, без provider) + нові (сервер, з provider).
+        // Подвоєння нема — у тому ж релізі клієнтський generate_ok прибрано, тож рядок на протокол один.
+        sum.genOk++; days[d].protocols++; u.protocols++; ud.protocols++;
+        if (typeof r.ms === "number") { sum.genMsTotal += r.ms; sum.genMsCount++; }
+        else if (r.value) sum.genSecTotal += r.value;
         break;
       case "generate_err": sum.genErr++; u.errors++; ud.errors++; bumpErr(r); break;
       case "transcribe_err": bumpErr(r); break;
