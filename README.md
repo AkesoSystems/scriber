@@ -5,7 +5,9 @@
 ## Як це працює
 
 1. **Розпізнавання мовлення** — браузер записує аудіо (`MediaRecorder`), бекенд `POST /api/transcribe` шле його в **Whisper large-v3 через Groq API** (мова uk, словник УЗД-термінів). Точно ловить швидку мову й медтерміни; працює в Chrome, Safari та Edge (зокрема на iPhone). Потрібен `GROQ_API_KEY`.
-2. **Структурування** — протокол формує **Claude Opus 4.8**. Пріоритет провайдера: **AWS Bedrock** (увімкнено наявністю `AWS_REGION` + AWS-кредів; оплата AWS-кредитами) → **Anthropic API** (`ANTHROPIC_API_KEY`) → резерв `claude -p` на підписці **Claude Max**. Стрімінг, без лімітів підписки.
+2. **Структурування** — протокол формує LLM. Пріоритет провайдера: **AWS Bedrock** (Converse API, увімкнено `AWS_REGION`+креди; модель `BEDROCK_MODEL`, за замовч. `us.amazon.nova-pro-v1:0`; оплата AWS-кредитами) → **Anthropic API** (`ANTHROPIC_API_KEY`, Claude Opus 4.8) → резерв `claude -p` на підписці **Claude Max**. Без лімітів підписки.
+
+   > Claude Opus 4.8 на Bedrock наразі заблоковано на рівні акаунта (не self-serve) — тому дефолт `BEDROCK_MODEL` = Amazon Nova Pro (доступна на кредитах одразу, якість для структурування протоколу відмінна). Коли Claude розблокують — змінити `BEDROCK_MODEL` на `anthropic.claude-opus-4-8` (код той самий, Converse).
 3. **Редагування** — contenteditable-документ у браузері.
 4. **Експорт** — .doc (Word відкриває нативно) або PDF через системний друк ("Зберегти як PDF").
 

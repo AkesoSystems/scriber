@@ -7,8 +7,8 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.31.0",
     "@anthropic-ai/sdk": "^0.106.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1075.0",
     "express": "^4.19.2",
     "multer": "^2.2.0"
   }

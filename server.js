@@ -5,7 +5,7 @@
 const express = require("express");
 const multer = require("multer");
 const Anthropic = require("@anthropic-ai/sdk");
-const { AnthropicBedrockMantle } = require("@anthropic-ai/bedrock-sdk");
+const { BedrockRuntimeClient, ConverseCommand } = require("@aws-sdk/client-bedrock-runtime");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -398,32 +398,53 @@ function stripFences(s) {
   return s.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "");
 }
 
-// Клієнт для формування протоколу. Пріоритет: AWS Bedrock (оплата AWS-кредитами),
-// далі Anthropic API (якщо заданий ключ), інакше null → fallback на `claude -p` (Max).
-// Bedrock вмикається наявністю AWS_REGION (+ AWS-креди беруться зі стандартного ланцюга).
-const apiClient = process.env.AWS_REGION
-  ? new AnthropicBedrockMantle({ awsRegion: process.env.AWS_REGION })
-  : (process.env.ANTHROPIC_API_KEY ? new Anthropic() : null);
-// Bedrock-моделі мають префікс `anthropic.`; перший-партійне API — без нього.
-const apiModel = process.env.AWS_REGION ? "anthropic.claude-opus-4-8" : "claude-opus-4-8";
+// ── Провайдери формування протоколу (пріоритет: Bedrock → Anthropic API → Max CLI) ──
+// Bedrock (AWS Converse) вмикається наявністю AWS_REGION + кредів; оплата AWS-кредитами.
+// Модель задається BEDROCK_MODEL (за замовч. Amazon Nova Pro — доступна на кредитах одразу;
+// коли розблокують Claude на Bedrock, достатньо змінити цю env, код той самий).
+const bedrock = process.env.AWS_REGION
+  ? new BedrockRuntimeClient({
+      region: process.env.AWS_REGION,
+      credentials: (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY)
+        ? { accessKeyId: process.env.AWS_ACCESS_KEY_ID, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY }
+        : undefined,
+    })
+  : null;
+const BEDROCK_MODEL = process.env.BEDROCK_MODEL || "us.amazon.nova-pro-v1:0";
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
-// Формування протоколу через Claude API/Bedrock (Opus 4.8). Без лімітів підписки Max,
-// швидко й надійно на довгих обстеженнях. Стрімінг — щоб не впертись у таймаут.
-async function protocolViaAPI(systemPrompt, raw, res) {
+// Формування протоколу через AWS Bedrock (Converse API). Будь-яка Bedrock-модель.
+async function protocolViaBedrock(systemPrompt, raw, res) {
   try {
-    const stream = apiClient.messages.stream({
-      model: apiModel,
+    const r = await bedrock.send(new ConverseCommand({
+      modelId: BEDROCK_MODEL,
+      system: [{ text: systemPrompt }],
+      messages: [{ role: "user", content: [{ text: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }] }],
+      inferenceConfig: { maxTokens: 4000, temperature: 0 },
+    }));
+    const text = ((r.output && r.output.message && r.output.message.content) || [])
+      .map((b) => b.text || "").join("").trim();
+    if (!text) {
+      return res.status(500).json({ error: "Модель (Bedrock) не повернула результат. Спробуйте ще раз." });
+    }
+    res.json({ html: stripFences(text) });
+  } catch (e) {
+    res.status(500).json({ error: "Помилка Bedrock: " + ((e && e.message) || "невідома помилка") });
+  }
+}
+
+// Формування протоколу через Anthropic API (Claude Opus 4.8). Стрімінг — щоб не впертись у таймаут.
+async function protocolViaAnthropic(systemPrompt, raw, res) {
+  try {
+    const stream = anthropic.messages.stream({
+      model: "claude-opus-4-8",
       max_tokens: 8000,
-      output_config: { effort: "low" }, // задача — структурування, не глибокі міркування
+      output_config: { effort: "low" },
       system: systemPrompt,
       messages: [{ role: "user", content: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }],
     });
     const msg = await stream.finalMessage();
-    const text = (msg.content || [])
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .trim();
+    const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
     if (!text) {
       return res.status(500).json({ error: "Claude (API) не повернув результат. Спробуйте ще раз." });
     }
@@ -468,8 +489,10 @@ app.post("/api/protocol", (req, res) => {
   const user = getAuthUser(req);
   const systemPrompt = PROMPTS_BY_USER[user] || SYSTEM_PROMPT;
 
-  if (apiClient) {
-    protocolViaAPI(systemPrompt, raw, res);
+  if (bedrock) {
+    protocolViaBedrock(systemPrompt, raw, res);
+  } else if (anthropic) {
+    protocolViaAnthropic(systemPrompt, raw, res);
   } else {
     protocolViaCLI(systemPrompt, raw, res);
   }
