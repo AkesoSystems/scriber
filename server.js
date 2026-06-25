@@ -61,7 +61,7 @@ const EV_CODES = new Set([
   "bedrock_throttle", "bedrock_empty", "bedrock_timeout", "bedrock_throw",
   "anthropic_empty", "anthropic_throw",
   "cli_timeout", "cli_limit", "cli_notfound", "cli_empty",
-  "no_provider", "network", "unknown",
+  "no_provider", "network", "trial_over", "unknown",
 ]);
 const EV_MODELS = new Set([
   "us.amazon.nova-pro-v1:0", "amazon.nova-pro-v1:0", "claude-opus-4-8", "claude-cli-max",
@@ -135,6 +135,45 @@ function dayKey(t) {
 function dayDiff(aKey, bKey) {
   return Math.round((Date.parse(aKey) - Date.parse(bKey)) / 86400000);
 }
+
+// ── Тестовий період: 14 днів від ПЕРШОГО протоколу кожного акаунту (логіну Basic Auth) ──
+const TRIAL_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TRIAL_MS = TRIAL_DAYS * DAY_MS;
+
+function readAnalyticsRows() {
+  try {
+    return fs.readFileSync(ANALYTICS_FILE, "utf8")
+      .split("\n").filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch (_) { return null; } })
+      .filter(Boolean);
+  } catch (_) { return []; }
+}
+
+// Стан тестового періоду логіну: коли був перший generate_ok і скільки днів лишилось.
+function trialState(user) {
+  let firstAt = 0;
+  for (const r of readAnalyticsRows()) {
+    if (r.user === user && r.event === "generate_ok" && typeof r.t === "number" && (!firstAt || r.t < firstAt)) {
+      firstAt = r.t;
+    }
+  }
+  if (!firstAt) return { started: false, expired: false, daysRemaining: TRIAL_DAYS, limitDays: TRIAL_DAYS, firstAt: 0 };
+  const remainingMs = TRIAL_MS - (Date.now() - firstAt);
+  return {
+    started: true,
+    expired: remainingMs <= 0,
+    daysRemaining: Math.max(0, Math.ceil(remainingMs / DAY_MS)),
+    limitDays: TRIAL_DAYS,
+    firstAt,
+  };
+}
+
+// Кожен акаунт бачить ЛИШЕ свій період (за власним Basic Auth-логіном) — ADMIN_KEY не потрібен.
+app.get("/api/trial", (req, res) => {
+  const user = getAuthUser(req);
+  res.json(Object.assign({ user }, trialState(user)));
+});
 
 app.get("/stats", (req, res) => {
   if (!ADMIN_KEY_OK) return res.status(503).send("Статистика не налаштована: задайте ADMIN_KEY у середовищі.");
@@ -776,6 +815,17 @@ app.post("/api/protocol", async (req, res) => {
 
   const user = getAuthUser(req);
   const uid = (req.body && req.body.uid) || "server";
+
+  // Тестовий період вичерпано → блокуємо генерацію (серверна перевірка, обійти з клієнта не можна).
+  const trial = trialState(user);
+  if (trial.expired) {
+    logEvent(uid, "generate_err", null, user, { stage: "generate", code: "trial_over" });
+    return res.status(403).json({
+      error: "Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.",
+      trialExpired: true,
+    });
+  }
+
   const systemPrompt = PROMPTS_BY_USER[user] || SYSTEM_PROMPT;
 
   // Ланцюг провайдерів: основний → резерв. Кожен збій логуємо з кодом; успіх після збою — fallback:true.

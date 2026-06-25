@@ -3,109 +3,196 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>УЗД-протокол — диктування</title>
+<meta name="theme-color" content="#1F8A8C">
+<title>Scriber — протокол УЗД</title>
 <style>
+  /* ── Палітра Scriber (тіл) у редакторській стилістиці Жидичин Центру ──
+     нульове заокруглення · чорний #1A1A1A як силовий акцент · uppercase мікро-лейбли ·
+     hover кнопок = чорна заливка · hover карток = лише тінь · щедрий простір, без анімацій-прикрас */
   :root{
-    --ink:#16242F;
-    --screen:#0B1418;
-    --screen-text:#C9E8E4;
+    --bg:#F6F8FD;
     --paper:#FFFFFF;
-    --bg:#EEF2F4;
+    --ink:#1A1A1A;
+    --body:#27333B;
+    --muted:#6B7A82;
+    --faint:#AEB8BD;
+    --line:#E2E8EB;
+    --line-soft:#EDF1F2;
     --teal:#1F8A8C;
     --teal-dark:#15686A;
-    --amber:#B07A1F;
-    --line:#D6DDE1;
-    --mono:"IBM Plex Mono","Consolas",monospace;
-    --sans:"IBM Plex Sans",system-ui,"Segoe UI",sans-serif;
+    --teal-soft:#E9F2F1;
+    --amber:#875B0F;
+    --amber-line:#E4CE9A;
+    --amber-soft:#FBF1DC;
+    --danger:#C0392B;
+    --hover-shadow:0 12px 32px rgba(0,0,0,.10);
+    --ease:cubic-bezier(.16,1,.3,1);
+    --mono:"Roboto Mono","IBM Plex Mono","SF Mono",Consolas,monospace;
+    --sans:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
-  header{padding:18px 28px;border-bottom:1px solid var(--line);background:var(--paper);
-    display:flex;align-items:baseline;gap:14px;}
-  header h1{margin:0;font-size:17px;font-weight:600;letter-spacing:.02em;}
-  header .sub{font-size:12.5px;color:#5C6B74;}
-  .wrap{max-width:1240px;margin:0 auto;padding:22px;display:grid;grid-template-columns:430px 1fr;gap:22px;}
-  @media(max-width:980px){.wrap{grid-template-columns:1fr}}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--body);font-family:var(--sans);
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;}
 
-  /* ── Панель диктовки: стилізована під екран УЗД-апарата ── */
-  .panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
-  .panel-h{padding:12px 16px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-    color:#5C6B74;border-bottom:1px solid var(--line);}
-  .screen{background:var(--screen);color:var(--screen-text);font-family:var(--mono);font-size:13.5px;
-    line-height:1.65;min-height:260px;max-height:420px;overflow-y:auto;padding:16px;white-space:pre-wrap;}
-  .screen .interim{opacity:.45}
-  .screen:empty::before{content:"Натисніть «Почати запис» і диктуйте протокол...";opacity:.35;}
-  .controls{padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-top:1px solid var(--line);}
-  button{font-family:var(--sans);font-size:14px;font-weight:600;border:none;border-radius:8px;
-    padding:11px 18px;cursor:pointer;transition:background .15s;}
+  /* ── Фон як на лендінгу AkesoSystems, але приглушений: мʼякі mesh-плями + ледь
+     помітна сітка. Фіксований шар за контентом; білі панелі лишаються поверх. ── */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(46% 42% at 12% 6%,  rgba(64,206,186,.13), transparent 70%),
+      radial-gradient(44% 40% at 90% 10%, rgba(99,140,255,.11), transparent 70%),
+      radial-gradient(54% 48% at 82% 94%, rgba(86,196,255,.10), transparent 70%),
+      radial-gradient(42% 44% at 14% 96%, rgba(31,138,140,.09), transparent 70%),
+      linear-gradient(90deg, rgba(120,150,200,.035) 1px, transparent 1px) 0 0/44px 44px,
+      linear-gradient(rgba(120,150,200,.035) 1px, transparent 1px) 0 0/44px 44px;
+  }
+
+  /* ── Шапка: редакторський вордмарк, без чорної риски ── */
+  header{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.78);
+    backdrop-filter:saturate(150%) blur(12px);-webkit-backdrop-filter:saturate(150%) blur(12px);
+    border-bottom:1px solid var(--line);padding:18px 30px;display:flex;align-items:center;gap:16px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .mark{width:13px;height:13px;background:var(--teal);flex:none;}
+  header h1{margin:0;font-size:15px;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:var(--ink);}
+  .byline{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.16em;font-weight:600;align-self:center;}
+  .trial{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;padding:6px 11px;background:var(--teal-soft);color:var(--teal-dark);
+    border:1px solid #CDE6E4;white-space:nowrap;}
+  .trial.warn{background:var(--amber-soft);color:var(--amber);border-color:var(--amber-line);}
+  .trial.over{background:#FBE7E4;color:var(--danger);border-color:#EBC3BD;}
+  .logout{padding:8px 13px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    background:transparent;color:var(--muted);border:1px solid var(--line);}
+  .logout:hover{background:#6B7780;color:#fff;border-color:#6B7780;}
+  @media(max-width:560px){.byline{display:none}}
+  @media(max-width:380px){.trial{font-size:10px;padding:6px 8px}}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:28px;
+    display:grid;grid-template-columns:minmax(360px,440px) 1fr;gap:24px;align-items:start;}
+  @media(max-width:980px){.wrap{grid-template-columns:1fr;padding:16px;gap:16px;}}
+
+  /* ── Картка (нульове заокруглення, плоска, чіткі краї) ── */
+  .panel{background:var(--paper);border:1px solid var(--line);}
+  .panel-h{padding:15px 20px;font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;
+    color:var(--faint);border-bottom:1px solid var(--line);display:flex;align-items:center;
+    justify-content:space-between;gap:10px;}
+
+  /* ── Поле диктовки: чорний «екран» з білим текстом ── */
+  .screen{font-family:var(--mono);font-size:14px;line-height:1.8;color:#F2F4F4;background:#0C0E10;
+    min-height:300px;max-height:46vh;overflow-y:auto;padding:22px;white-space:pre-wrap;}
+  .screen .interim{color:#8A949A;}
+  .screen:empty::before{content:"Натисніть «Почати запис» і диктуйте протокол…";color:#7C868C;}
+
+  .controls{padding:16px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    border-top:1px solid var(--line);}
+  button{font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    border:1px solid transparent;border-radius:0;padding:12px 18px;cursor:pointer;
+    transition:background .25s var(--ease),color .25s var(--ease),border-color .25s var(--ease);
+    -webkit-tap-highlight-color:transparent;}
   button:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
   .btn-rec{background:var(--teal);color:#fff;}
-  .btn-rec:hover{background:var(--teal-dark)}
-  .btn-rec.recording{background:#B3372F;}
-  .btn-ghost{background:transparent;color:#5C6B74;border:1px solid var(--line);}
-  .btn-ghost:hover{background:#F2F5F6}
+  .btn-rec:hover{background:var(--teal-dark);}
+  .btn-rec.recording{background:var(--danger);}
+  .btn-ghost{background:transparent;color:var(--ink);border-color:var(--line);}
+  .btn-ghost:hover{background:#6B7780;color:#fff;border-color:#6B7780;}
   .btn-main{background:var(--ink);color:#fff;}
-  .btn-main:hover{background:#243845}
-  .btn-main:disabled{background:#9AA7AE;cursor:default;}
-  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#fff;margin-right:8px;vertical-align:1px;}
-  .timer{margin-left:auto;align-self:center;font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap;}
+  .btn-main:hover{background:var(--teal-dark);}
+  .btn-main:disabled{background:#CBD3D8;color:#fff;cursor:default;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;
+    margin-right:9px;vertical-align:1px;}
   .recording .dot{animation:pulse 1.1s infinite;}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+  .timer{margin-left:auto;align-self:center;font-family:var(--mono);font-size:12px;
+    color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
+  .hint{padding:0 20px 18px;font-size:12.5px;color:var(--muted);line-height:1.6;}
+  .hint b{color:var(--amber);}
   @media(prefers-reduced-motion:reduce){.recording .dot{animation:none}}
-  .hint{padding:0 16px 14px;font-size:12.5px;color:#5C6B74;line-height:1.5;}
+
+  /* ── Живий рівень мікрофона: видно, що тебе чують ── */
+  .level{display:none;flex-basis:100%;height:5px;background:var(--line-soft);overflow:hidden;margin-top:2px;}
+  .level.show{display:block;}
+  .level i{display:block;height:100%;width:0;background:var(--teal);transition:width .08s linear;}
 
   /* ── Документ ── */
-  .doc-panel .panel-h{display:flex;justify-content:space-between;align-items:center;}
   .doc-actions{display:flex;gap:8px;}
-  .doc-actions button{padding:7px 13px;font-size:13px;}
-  #doc{padding:34px 44px;min-height:560px;outline:none;font-size:14.5px;line-height:1.7;}
-  #doc:empty::before{content:"Тут з'явиться сформований протокол. Його можна редагувати як звичайний текст.";color:#9AA7AE;}
-  #doc h2{font-size:17px;text-align:center;letter-spacing:.04em;margin:0 0 18px;}
-  #doc h3{font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-dark);
-    border-bottom:1px solid var(--line);padding-bottom:4px;margin:20px 0 8px;}
-  #doc p{margin:6px 0;}
-  .flag{background:#FBF0DB;color:var(--amber);font-weight:700;padding:0 4px;border-radius:3px;}
-  .status{padding:10px 16px;font-size:13px;color:#5C6B74;min-height:38px;}
-  .status.err{color:#B3372F;}
+  .doc-actions button{padding:8px 13px;font-size:11px;}
+  .prog{height:0;background:var(--line-soft);overflow:hidden;transition:height .25s var(--ease);}
+  .prog.show{height:3px;}
+  .prog-bar{display:block;height:100%;width:0;background:var(--teal);transition:width .25s linear;}
+  #doc{padding:44px 54px;min-height:540px;outline:none;font-size:15.5px;line-height:1.85;color:var(--body);}
+  #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст.";
+    color:var(--faint);}
+  #doc h2{font-size:21px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 24px;}
+  #doc h3{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dark);font-weight:700;
+    border-bottom:1px solid var(--ink);padding-bottom:6px;margin:26px 0 11px;}
+  #doc p{margin:7px 0;}
+  #doc table{border-collapse:collapse;width:100%;margin:8px 0 18px;}
+  #doc th,#doc td{border:1px solid var(--line);padding:7px 11px;vertical-align:top;}
+  .flag{background:var(--amber-soft);color:var(--amber);font-weight:700;padding:0 5px;scroll-margin:90px;}
+  .flag.active{outline:2px solid var(--amber);outline-offset:1px;background:#F6E3B6;}
+  .status{padding:14px 20px;font-size:13px;color:var(--muted);min-height:44px;
+    border-top:1px solid var(--line);}
+  .status.err{color:var(--danger);}
 
-  /* ── Оцінка якості ── */
-  .rate{display:none;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--line);
-    background:#F7FAF9;font-size:13.5px;color:var(--ink);flex-wrap:wrap;}
-  .rate.show{display:flex;}
-  .rate .stars{display:flex;gap:2px;}
-  .rate .star{font-size:24px;color:#C7D2D7;cursor:pointer;background:none;border:none;padding:2px 3px;line-height:1;}
-  .rate .star:hover,.rate .star.on{color:#E5A33B;}
-  .rate .thanks{color:var(--teal-dark);font-weight:600;}
+  /* ── Навігація по сумнівних місцях [?] ── */
+  .flagnav{display:none;align-items:center;gap:10px;padding:11px 20px;border-top:1px solid var(--line);
+    background:var(--amber-soft);font-size:12.5px;color:var(--amber);flex-wrap:wrap;}
+  .flagnav.show{display:flex;}
+  .flagnav .fn-count{font-weight:700;}
+  .flagnav button{padding:9px 13px;font-size:11px;background:var(--paper);color:var(--amber);
+    border:1px solid var(--amber-line);margin-left:auto;}
+  .flagnav button+button{margin-left:6px;}
+  .flagnav button:hover{background:var(--amber);color:#fff;border-color:var(--amber);}
+
+  /* ── Оцінка якості: маленька модалка ── */
+  .modal{display:none;position:fixed;inset:0;z-index:50;background:rgba(12,14,16,.5);
+    align-items:center;justify-content:center;padding:20px;}
+  .modal.show{display:flex;}
+  .modal-card{position:relative;background:var(--paper);border:1px solid var(--line);
+    box-shadow:0 24px 60px rgba(0,0,0,.22);max-width:360px;width:100%;padding:32px 28px 26px;text-align:center;}
+  .modal-x{position:absolute;top:6px;right:6px;background:none;border:none;font-size:24px;line-height:1;
+    color:var(--faint);padding:6px 10px;cursor:pointer;}
+  .modal-x:hover{color:var(--ink);background:none;}
+  .modal-title{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal-dark);}
+  .modal-sub{font-size:13.5px;color:var(--muted);margin:5px 0 18px;}
+  .modal .stars{display:flex;justify-content:center;gap:5px;}
+  .modal .star{font-size:34px;color:#B7CECE;cursor:pointer;background:none;border:none;padding:2px 4px;
+    line-height:1;transition:color .12s,transform .12s;}
+  .modal .star:hover,.modal .star.on{color:#D99A2B;}
+  .modal .star:hover{transform:scale(1.12);}
+  .modal .thanks{display:block;margin-top:16px;color:var(--teal-dark);font-weight:700;
+    text-transform:uppercase;letter-spacing:.06em;font-size:12px;}
+  @media(prefers-reduced-motion:reduce){.modal .star{transition:color .12s}.modal .star:hover{transform:none}}
 
   @media print{
     body *{visibility:hidden}
     #doc,#doc *{visibility:visible}
-    #doc{position:absolute;left:0;top:0;width:100%;padding:0;column-count:1!important;}
+    #doc{position:absolute;left:0;top:0;width:100%;padding:0;}
     .flag{background:none;color:inherit;font-weight:inherit;}
   }
 
-  /* ── Мобільна версія ── */
+  /* ── Мобільна ── */
   @media(max-width:700px){
-    header{padding:14px 16px;flex-wrap:wrap;gap:6px;}
+    header{padding:14px 16px;}
     .wrap{padding:12px;gap:14px;}
-    .screen{min-height:180px;max-height:38vh;font-size:13px;
-      word-break:break-word;overflow-wrap:anywhere;column-count:1;}
+    .screen{min-height:170px;max-height:40vh;padding:16px;word-break:break-word;overflow-wrap:anywhere;}
     .controls{padding:12px;}
-    .controls button{flex:1 1 auto;min-width:0;padding:12px 10px;font-size:13.5px;}
-    .doc-panel .panel-h{flex-wrap:wrap;gap:8px;}
-    .doc-actions{width:100%;display:flex;}
-    .doc-actions button{flex:1;padding:9px 6px;font-size:12.5px;}
-    #doc{padding:18px 16px;min-height:300px;font-size:14px;}
-    .hint{font-size:12px;}
-    .rate{gap:8px;}
-    .rate .star{font-size:28px;padding:4px 5px;} /* більші зони дотику */
+    .controls button{flex:1 1 auto;min-width:0;min-height:46px;padding:13px 10px;}
+    .timer{flex-basis:100%;margin:2px 0 0;text-align:center;}
+    .panel-h{flex-wrap:wrap;}
+    .doc-actions{width:100%;}
+    .doc-actions button{flex:1;min-height:44px;padding:11px 6px;}
+    .flagnav button{min-height:44px;}
+    #doc{padding:24px 18px;min-height:300px;}
+    .modal .star{font-size:38px;padding:5px 7px;}
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>УЗД-протокол</h1>
-  <span class="sub">диктування → структурування → редагування → експорт</span>
+  <span class="brand"><span class="mark"></span><h1>Scriber</h1><span class="byline">AkesoSystems</span></span>
+  <span class="trial" id="trial" hidden></span>
+  <button class="logout" id="logoutBtn" type="button" hidden>Вийти</button>
 </header>
 
 <div class="wrap">
@@ -117,30 +204,42 @@
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
+      <span class="level" id="level" aria-hidden="true"><i id="levelBar"></i></span>
     </div>
-    <div class="hint">Натисніть «Почати запис», диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
-      Текст з'являється блоками під час диктовки; після «Зупинити запис» додається останній фрагмент.
-      Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
+    <div class="hint">Диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
+      Текст зʼявляється блоками під час диктовки. Сумнівні місця буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
   </section>
 
   <section class="panel doc-panel">
     <div class="panel-h">
-      <span>Протокол (можна редагувати)</span>
+      <span>Протокол · можна редагувати</span>
       <span class="doc-actions">
         <button id="copyBtn" class="btn-ghost">Копіювати</button>
-        <button id="docBtn" class="btn-ghost">Зберегти Word</button>
-        <button id="pdfBtn" class="btn-ghost">Зберегти PDF</button>
+        <button id="docBtn" class="btn-ghost">Word</button>
+        <button id="pdfBtn" class="btn-ghost">PDF</button>
       </span>
     </div>
+    <div class="prog" id="progWrap"><span class="prog-bar" id="progBar"></span></div>
     <div id="doc" contenteditable="true" spellcheck="true"></div>
-    <div class="rate" id="rate">
-      <span>Оцініть якість протоколу:</span>
-      <span class="stars" id="stars">
-        <button class="star" data-v="1" aria-label="1 з 5">★</button><button class="star" data-v="2" aria-label="2 з 5">★</button><button class="star" data-v="3" aria-label="3 з 5">★</button><button class="star" data-v="4" aria-label="4 з 5">★</button><button class="star" data-v="5" aria-label="5 з 5">★</button>
-      </span>
+    <div class="flagnav" id="flagNav">
+      <span class="fn-count" id="flagCount"></span>
+      <span>— перевірте перед збереженням</span>
+      <button id="flagPrev" type="button" aria-label="Попереднє сумнівне місце">↑ Попереднє</button>
+      <button id="flagNext" type="button" aria-label="Наступне сумнівне місце">↓ Наступне [?]</button>
     </div>
     <div class="status" id="status"></div>
   </section>
+</div>
+
+<div class="modal" id="rateModal" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Оцінка якості протоколу">
+    <button class="modal-x" id="rateClose" type="button" aria-label="Закрити">×</button>
+    <div class="modal-title">Оцініть якість</div>
+    <div class="modal-sub">Наскільки точний згенерований протокол?</div>
+    <div class="stars" id="stars">
+      <button class="star" data-v="1" aria-label="1 з 5">★</button><button class="star" data-v="2" aria-label="2 з 5">★</button><button class="star" data-v="3" aria-label="3 з 5">★</button><button class="star" data-v="4" aria-label="4 з 5">★</button><button class="star" data-v="5" aria-label="5 з 5">★</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -162,6 +261,16 @@
   const statusEl = document.getElementById("status");
   const docBtn = document.getElementById("docBtn");
   const pdfBtn = document.getElementById("pdfBtn");
+  const progWrap = document.getElementById("progWrap");
+  const progBar = document.getElementById("progBar");
+  const levelEl = document.getElementById("level");
+  const levelBar = document.getElementById("levelBar");
+  const flagNav = document.getElementById("flagNav");
+  const flagCount = document.getElementById("flagCount");
+  const trialEl = document.getElementById("trial");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const rateModal = document.getElementById("rateModal");
+  let trialExpired = false;
 
   let finalText = "";        // підтверджений текст (зібраний із сегментів) — іде в протокол
   let liveText = "";         // живий текст поточного запису (накопичені сегменти Whisper)
@@ -182,6 +291,86 @@
   const timerEl = document.getElementById("timer");
   let recTimer = null, recStopAt = 0, lastRecDur = 0;
   const fmtT = (ms) => { const s = Math.max(0, Math.round(ms/1000)); return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); };
+
+  // ── Прогрес генерації: орієнтовний час калібрується під реальні виміри ЦЬОГО пристрою ──
+  const GEN_DEFAULT_MS = 12000;
+  function expectedGenMs(){
+    const v = Number(localStorage.getItem("uzd_gen_ms"));
+    return (v && v > 1500 && v < 120000) ? v : GEN_DEFAULT_MS;
+  }
+  function saveGenMs(ms){
+    if (!(ms > 0)) return;
+    const prev = expectedGenMs();
+    localStorage.setItem("uzd_gen_ms", String(Math.round(prev * 0.6 + ms * 0.4))); // згладжене середнє
+  }
+  let progRAF = 0, genT0 = 0;
+  function progressTick(){
+    const el = performance.now() - genT0;
+    const exp = expectedGenMs();
+    const pct = 96 * (1 - Math.exp(-el / exp));                 // асимптота до 96% — не «бреше» про завершення
+    progBar.style.width = pct.toFixed(1) + "%";
+    const remain = Math.ceil(Math.max(0, exp - el) / 1000);
+    timerEl.textContent = el < exp
+      ? "формую протокол… ще ≈ " + remain + " с"
+      : "формую протокол… майже готово (" + (el/1000).toFixed(0) + " с)";
+    progRAF = requestAnimationFrame(progressTick);
+  }
+  function startProgress(){ genT0 = performance.now(); progWrap.classList.add("show"); progBar.style.width = "0%"; progressTick(); }
+  function stopProgress(done){
+    if (progRAF){ cancelAnimationFrame(progRAF); progRAF = 0; }
+    if (done){ progBar.style.width = "100%"; setTimeout(() => { progWrap.classList.remove("show"); progBar.style.width = "0%"; }, 450); }
+    else { progWrap.classList.remove("show"); progBar.style.width = "0%"; }
+  }
+
+  // ── Живий рівень мікрофона: підтверджує лікарю, що його чують ──
+  let audioCtx = null, analyser = null, levelRAF = 0;
+  function startLevel(stream){
+    try{
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaStreamSource(stream);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      levelEl.classList.add("show");
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i];
+        const pct = Math.min(100, (sum / data.length / 130) * 100);  // 0..255 → 0..100, з форою
+        levelBar.style.width = pct.toFixed(0) + "%";
+        levelRAF = requestAnimationFrame(tick);
+      };
+      tick();
+    }catch(_){ /* без рівня — не критично */ }
+  }
+  function stopLevel(){
+    if (levelRAF){ cancelAnimationFrame(levelRAF); levelRAF = 0; }
+    levelEl.classList.remove("show");
+    levelBar.style.width = "0%";
+    if (audioCtx){ try{ audioCtx.close(); }catch(_){} audioCtx = null; analyser = null; }
+  }
+
+  // ── Навігація по сумнівних місцях [?] ──
+  let flagIdx = -1;
+  function flags(){ return doc.querySelectorAll(".flag"); }
+  function showFlagNav(){
+    const n = flags().length;
+    flagIdx = -1;
+    if (n){ flagCount.textContent = "Сумнівних місць [?]: " + n; flagNav.classList.add("show"); }
+    else flagNav.classList.remove("show");
+  }
+  function jumpFlag(step){
+    const list = flags();
+    if (!list.length) return;
+    list.forEach(f => f.classList.remove("active"));
+    flagIdx = (flagIdx + step + list.length) % list.length;
+    const el = list[flagIdx];
+    el.classList.add("active");
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    flagCount.textContent = "Місце [?] " + (flagIdx + 1) + " з " + list.length;
+  }
+  document.getElementById("flagNext").addEventListener("click", () => jumpFlag(1));
+  document.getElementById("flagPrev").addEventListener("click", () => jumpFlag(-1));
 
   // Якщо людина прокрутила вгору — не смикаємо екран; повернулась донизу — знову автоскрол
   screen.addEventListener("scroll", () => {
@@ -210,7 +399,7 @@
       screen.append(s);
     }
     if (stickToBottom) screen.scrollTop = screen.scrollHeight;
-    genBtn.disabled = !(finalText.trim() || recording || liveText.trim());
+    genBtn.disabled = trialExpired || !(finalText.trim() || recording || liveText.trim());
   }
 
   // Найкращий підтримуваний формат запису (opus компактний; Safari віддає mp4).
@@ -272,6 +461,7 @@
       return;
     }
     liveText = "";
+    startLevel(micStream);                             // живий рівень мікрофона
     startSegment();                                    // перший сегмент
     segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле + стартує наступний
       if (segRec && segRec.state === "recording"){ try{ segRec.stop(); }catch(_){} }
@@ -293,6 +483,7 @@
   function stopRec(){
     if (!recording) return transcribing || Promise.resolve();
     recording = false;
+    stopLevel();
     if (recStartedAt){ lastRecDur = Date.now() - recStartedAt; track("rec_stop", Math.round(lastRecDur / 1000)); recStartedAt = 0; }
     if (recTimer){ clearInterval(recTimer); recTimer = null; }
     recStopAt = Date.now();
@@ -319,18 +510,16 @@
   });
 
   genBtn.addEventListener("click", async () => {
+    if (trialExpired){ setStatus("Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.", true); return; }
     if (recording) await stopRec();      // зупинити запис і дочекатись розпізнавання
     else if (transcribing) await transcribing;
     if (!finalText.trim()){ setStatus("Немає тексту для протоколу — спершу зробіть запис.", true); return; }
     genBtn.disabled = true;
+    flagNav.classList.remove("show");
     setStatus("Формую протокол…");
     track("generate");
     const t0 = performance.now();
-    // живий секундомір генерації (десяті секунди)
-    timerEl.textContent = "генерація 0,0 с";
-    let genTimer = setInterval(() => {
-      timerEl.textContent = "генерація " + ((performance.now() - t0) / 1000).toFixed(1).replace(".", ",") + " с";
-    }, 100);
+    startProgress();                       // прогрес-бар + орієнтовний час (калібрується)
     let gotResponse = false;
     try{
       const r = await fetch("/api/protocol", {
@@ -340,32 +529,89 @@
       });
       gotResponse = true;
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Помилка сервера");
-      clearInterval(genTimer); genTimer = null;
+      if (!r.ok){ if (data.trialExpired) lockForTrial(); throw new Error(data.error || "Помилка сервера"); }
+      const ms = (typeof data.ms === "number" ? data.ms : (performance.now() - t0));
+      saveGenMs(ms);                       // калібруємо орієнтир під реальний час
+      stopProgress(true);
       // generate_ok логує СЕРВЕР (з provider/ms). Тут лише показуємо чистий серверний час, якщо є.
-      const secs = (typeof data.ms === "number" ? data.ms : (performance.now() - t0)) / 1000;
-      timerEl.textContent = "протокол за " + secs.toFixed(1).replace(".", ",") + " с"
+      timerEl.textContent = "протокол за " + (ms/1000).toFixed(1).replace(".", ",") + " с"
         + (data.provider ? " · " + data.provider : "");
       doc.innerHTML = data.html.replace(/\[\?\]/g, '<span class="flag">[?]</span>');
-      const flags = doc.querySelectorAll(".flag").length;
-      setStatus(flags
-        ? "Протокол готовий. Перевірте " + flags + " позначених місць [?] перед збереженням."
+      const flagCnt = doc.querySelectorAll(".flag").length;
+      showFlagNav();
+      resetRating();                       // новий протокол → дозволяємо оцінити ще раз
+      loadTrial();                          // перший протокол запускає відлік 14 днів → оновлюємо лічильник
+      setStatus(flagCnt
+        ? "Протокол готовий. Перевірте " + flagCnt + " позначених місць [?] перед збереженням."
         : "Протокол готовий. Перегляньте та відредагуйте за потреби.");
     }catch(err){
-      if (genTimer){ clearInterval(genTimer); genTimer = null; }
+      stopProgress(false);
       timerEl.textContent = "";
       // generate_err логує СЕРВЕР; клієнт фіксує лише мережевий збій (сервер запит не бачив).
       if (!gotResponse) track("generate_err", null, { code: "network" });
       setStatus(err.message, true);
     }finally{
-      genBtn.disabled = !finalText.trim();
+      genBtn.disabled = trialExpired || !finalText.trim();
     }
   });
 
-  // ── Оцінка якості: показуємо після збереження документа ──
-  const rateEl = document.getElementById("rate");
+  // ── Тестовий період (14 днів від першого протоколу) ──
+  function renderTrial(d){
+    if (!d) return;
+    trialEl.hidden = false;
+    if (d.expired){
+      trialEl.textContent = "Тест завершено";
+      trialEl.className = "trial over";
+      return;
+    }
+    const n = d.daysRemaining;
+    const word = (n % 10 === 1 && n % 100 !== 11) ? "день"
+      : ((n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? "дні" : "днів");
+    trialEl.textContent = "Тест: " + n + " " + word;
+    trialEl.className = "trial" + (n <= 3 ? " warn" : "");
+  }
+  function lockForTrial(){
+    trialExpired = true;
+    genBtn.disabled = true;
+    renderTrial({ expired: true });
+    setStatus("Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.", true);
+  }
+  async function loadTrial(){
+    try{
+      const r = await fetch("/api/trial", { cache: "no-store" });
+      if (!r.ok) return;
+      const d = await r.json();
+      renderTrial(d);
+      if (d.expired) lockForTrial();
+    }catch(_){ /* без лічильника — не критично */ }
+  }
+  loadTrial();
+
+  // ── Вихід з акаунту (Basic Auth не має справжнього logout — best-effort) ──
+  logoutBtn.hidden = false;
+  logoutBtn.addEventListener("click", async () => {
+    // Запит із завідомо хибними креденшлами → nginx віддає 401 → браузер скидає
+    // закешований логін. Далі перезавантаження змусить ввести пароль заново.
+    try{
+      await fetch(location.href, {
+        headers: { "Authorization": "Basic " + btoa("logout:" + Date.now()) },
+        cache: "no-store",
+      });
+    }catch(_){}
+    alert("Сеанс завершено. Якщо вікно входу не зʼявилося — закрийте вкладку або браузер, щоб вийти повністю.");
+    location.reload();
+  });
+
+  // ── Оцінка якості: маленька модалка після експорту ──
   let rated = false;
-  function showRating(){ if (!rated) rateEl.classList.add("show"); }
+  function openRate(){ if (!rated){ rateModal.classList.add("show"); rateModal.setAttribute("aria-hidden", "false"); } }
+  function closeRate(){ rateModal.classList.remove("show"); rateModal.setAttribute("aria-hidden", "true"); }
+  function showRating(){ openRate(); }
+  function resetRating(){
+    rated = false;
+    document.querySelectorAll("#stars .star").forEach((s) => { s.classList.remove("on"); s.style.cursor = "pointer"; });
+    const th = rateModal.querySelector(".thanks"); if (th) th.remove();
+  }
   document.getElementById("stars").addEventListener("click", (e) => {
     const v = Number(e.target.dataset && e.target.dataset.v);
     if (!v || rated) return;
@@ -375,12 +621,17 @@
       s.classList.toggle("on", Number(s.dataset.v) <= v);
       s.style.cursor = "default";
     });
-    const t = document.createElement("span");
-    t.className = "thanks";
-    t.textContent = "Дякуємо!";
-    rateEl.appendChild(t);
-    setTimeout(() => rateEl.classList.remove("show"), 2500);
+    if (!rateModal.querySelector(".thanks")){
+      const t = document.createElement("span");
+      t.className = "thanks";
+      t.textContent = "Дякуємо!";
+      rateModal.querySelector(".modal-card").appendChild(t);
+    }
+    setTimeout(closeRate, 1400);
   });
+  document.getElementById("rateClose").addEventListener("click", closeRate);
+  rateModal.addEventListener("click", (e) => { if (e.target === rateModal) closeRate(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRate(); });
 
   // ── Копіювати протокол (з таблицями) ──
   // Кладемо у буфер І HTML, І звичайний текст: rich-редактори (Word, Google Docs,
@@ -424,7 +675,7 @@
       'h2{text-align:center;font-size:14pt}h3{font-size:12pt;text-transform:uppercase}</style></head><body>' +
       doc.innerHTML.replace(/<span class="flag">(\[\?\])<\/span>/g, "$1") +
       "</body></html>";
-    const blob = new Blob(["\ufeff", html], { type: "application/msword" });
+    const blob = new Blob(["﻿", html], { type: "application/msword" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "protokol-uzd-" + new Date().toISOString().slice(0,10) + ".doc";
