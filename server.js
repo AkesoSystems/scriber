@@ -309,20 +309,23 @@ const SYSTEM_PROMPT = `Ти — медичний редактор, що офор
 Жодних <h3>, жодних <table>. Нічого, крім цього HTML-фрагмента, не виводь.`;
 
 // ───────────── Промпт для test3: дитяча ехокардіографія у вигляді таблиць ─────────────
-// Результат — лише HTML-таблиці, БЕЗ даних пацієнта. Структура жорстко задана нижче;
-// модель лише підставляє продиктовані значення у відповідні клітинки.
+// Точна структура з шаблону лікаря (Ехо КГ дитяче.docx): шапка пацієнта + усі таблиці +
+// підпис. Поля пацієнта лишаються ПОРОЖНІМИ (лікар вписує вручну — PHI не йде в LLM).
+// Принцип як у решти: незгадане/сумнівне → [?]; висновок — по фактичних знахідках.
 const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що оформлює протокол ДИТЯЧОЇ ЕХОКАРДІОГРАФІЇ українською мовою у вигляді HTML-ТАБЛИЦЬ.
 
 Тобі дають СИРИЙ текст диктовки лікаря (результат розпізнавання мовлення, можливі помилки розпізнавання).
 
 КАТЕГОРИЧНІ ПРАВИЛА ДАНИХ:
-1. БЕЗ даних пацієнта: НЕ додавай ПІБ, вік, стать, вагу, зріст, дату — нічого з цього.
+1. Поля пацієнта (Дата, Пацієнт, Вік, Дата народження, Стать, Вага, Зріст, Площа поверхні тіла) лиши ПОРОЖНІМИ — лікар впише вручну. НЕ вписуй ПІБ/вік/стать/дату навіть якщо це продиктовано.
 2. Підставляй ЛИШЕ продиктовані числа та факти. Числа нормалізуй: "два цілих три" → "2,3"; "сто сорок два" → "142"; десятковий роздільник — кома; розміри "чотири на шість" → "4 × 6".
-3. Якщо параметр НЕ продиктовано — постав [не вказано]. НЕ вигадуй розмірів, швидкостей, ФВ тощо.
-4. Z-score/SD і градієнти (ΔР), якщо НЕ названо — лишай порожні дужки: "Z,SD = ( )" та "ΔР max ... = ( )".
+3. Якщо число/параметр НЕ продиктовано — постав [?] на його місці (його підсвітять). НЕ вигадуй розмірів, швидкостей, ФВ тощо, НЕ лишай порожньо.
+4. Z-score/SD і градієнти (ΔР), якщо НЕ названо — постав [?] у відповідному місці: "Z,SD = [?]" та "ΔР max ... = [?]".
 5. Якісні/анатомічні формулювання в шаблоні нижче — це НОРМАЛЬНІ значення за замовчуванням. Лишай їх як є, АЛЕ якщо в диктовці названо патологію чи інше — ЗАМІНИ формулювання на продиктоване.
-6. Сумнівне розпізнавання познач [?] одразу після слова/числа.
-7. Нічого зайвого не додавай: жодних розділів чи рядків поза шаблоном.
+6. Сумнівне розпізнавання / нерозчуте слово познач [?] одразу після нього.
+7. ІГНОРУЙ поза-контекст: розмови з пацієнтом, побутові репліки, команди ("дихай", "не рухайся") — НЕ вписуй.
+8. Нічого зайвого не додавай: жодних розділів чи рядків поза шаблоном.
+9. ВИСНОВОК генеруй ПО СУТІ протоколу: якщо є патологія — вкажи саме її; якщо все в нормі — «Даних за структурну патологію серця немає».
 
 ФОРМАТ HTML (лише фрагмент: без <html>, <head>, <body>, без markdown, без пояснень, без \`\`\`):
 - Заголовок усього: <h2>Ехокардіографічне обстеження</h2>
@@ -331,31 +334,33 @@ const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що 
 - Кожна <td> і <th>: style="border:1px solid #999;padding:6px 10px;vertical-align:top". <th> додатково: text-align:left;background:#f0f0f0.
 - Назви парних структур — у <th> (двоколонкові таблиці).
 
-ВИКОРИСТАЙ РІВНО ТАКУ СТРУКТУРУ (підстав значення у місця з [не вказано]/( ); якісні значення заміни лише за наявності патології в диктовці):
+ВИКОРИСТАЙ РІВНО ТАКУ СТРУКТУРУ (підстав значення у місця з [?]; поля пацієнта лиши порожніми; якісні значення заміни лише за наявності патології в диктовці):
 
 <h2>Ехокардіографічне обстеження</h2>
+
+<p>Дата: <br>Пацієнт: <br>Вік:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Дата народження: <br>Стать: <br>Вага:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Зріст:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Площа поверхні тіла: </p>
 
 <h3>Анатомія</h3>
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Розташування передсердь</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Solitus</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Розташування серця</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Лівокардія</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Серце</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">двошлуночкове</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">АВ-сполучення</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">конкордантне</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ШлА-сполучення</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">конкордантне</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Передсердно-шлуночкове сполучення</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">конкордантне</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Шлуночково-артеріальне сполучення</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">конкордантне</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Хід магістральних судин</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">перехресний</td></tr>
 </table>
 
 <h3>Передсердя</h3>
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Праве передсердя</th><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Ліве передсердя</th></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">розмір: [не вказано]</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">розмір: [не вказано]</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">розмір: норма</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">розмір [?] мм: норма</td></tr>
 </table>
 
 <h3>Вени та перетинки</h3>
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Порожнисті вени</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">впадають</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Легеневі вени</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">впадають всі</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Безіменна вена</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">наявна, діаметр [не вказано]</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Безіменна вена</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">наявна, діаметр [?]</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Додаткова ВПВ</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">немає</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Міжпередсердна перетинка</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">інтактна</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Коронарний синус</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">не розширений</td></tr>
@@ -364,8 +369,8 @@ const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що 
 <h3>Атріовентрикулярні клапани</h3>
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Тристулковий клапан</th><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Мітральний клапан</th></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">діаметр: [не вказано] мм (Z,SD = ( ); N = [не вказано] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">діаметр: [не вказано] мм (Z,SD = ( ); N = [не вказано] мм)</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">швидкість: [не вказано] м/с</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">швидкість: [не вказано] м/с</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">діаметр: [?] мм (Z,SD = [?]; N = [?] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">діаметр: [?] мм (Z,SD = [?]; N = [?] мм)</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">швидкість: [?] м/с</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">швидкість: [?] м/с</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">недостатність: відсутня</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">недостатність: відсутня</td></tr>
 </table>
 
@@ -373,21 +378,20 @@ const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що 
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Правий шлуночок</th><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Лівий шлуночок</th></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">порожнина не розширена</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">порожнина норма, до верхівки доходить</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">скоротливість добра</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">скоротливість добра</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">до верхівки доходить</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ФВ = [не вказано] %</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top"></td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">КДР = [не вказано]; КДО = [не вказано]; КДІ = [не вказано]</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top"></td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ТМШП = [не вказано]; ТЗСЛШ = [не вказано]</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">скоротливість добра</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">скоротливість добра; ФВ = [?] %</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">до верхівки доходить</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">КДР = [?]; КДО = [?]; КДІ = [?]</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top"></td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ТМШП = [?]; ТЗСЛШ = [?]</td></tr>
 <tr><td colspan="2" style="border:1px solid #999;padding:6px 10px;vertical-align:top">Міжшлуночкова перетинка — інтактна</td></tr>
 </table>
 
 <h3>Магістральні судини</h3>
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Легенева артерія</th><th style="border:1px solid #999;padding:6px 10px;text-align:left;background:#f0f0f0">Аорта</th></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">клапан ЛА: [не вказано] мм (Z,SD = ( ); N = [не вказано] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">клапан Ао: [не вказано] мм (Z,SD = ( ); N = [не вказано] мм)</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">стовбур ЛА: [не вказано]</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">синус Вальсальви: [не вказано]</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">права гілка ЛА: [не вказано]</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ST-сполучення: [не вказано]</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ліва гілка ЛА: [не вказано]</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">клапан Ао тристулковий</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ΔР max клапан = ( ) мм.рт.ст</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ΔР max клапан = ( ) мм.рт.ст</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">клапан ЛА: [?] мм (Z,SD = [?]; N = [?] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">клапан Ао: [?] мм (Z,SD = [?]; N = [?] мм)</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">стовбур ЛА: [?] мм (Z,SD = [?]; N = [?] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">синус Вальсальви: [?] мм (Z,SD = [?]; N = [?] мм)</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">права гілка ЛА: [?] мм (Z,SD = [?]; N = [?] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ST-сполучення: [?] мм (Z,SD = [?]; N = [?] мм)</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ліва гілка ЛА: [?] мм (Z,SD = [?]; N = [?] мм)</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">клапан Ао тристулковий</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ΔР max клапан = [?] мм.рт.ст</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ΔР max клапан = [?] мм.рт.ст</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">недостатність: відсутня</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">недостатність: відсутня</td></tr>
 </table>
 
@@ -395,17 +399,19 @@ const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що 
 <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 14px">
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Відкрита артеріальна протока</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">відсутня</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Легенева гіпертензія</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">відсутня</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Рідина в перикарді</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">відсутня</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Кровотік у черевній аорті</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">пульсуючий</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Рідина в порожнині перикарду</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">відсутня</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">В черевній аорті кровотік</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">пульсуючий</td></tr>
 <tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Коронарні артерії</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">без особливостей</td></tr>
-<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Дуга аорти</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ΔР max = ( ); дуга лівостороння; коарктації немає</td></tr>
+<tr><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">Дуга аорти</td><td style="border:1px solid #999;padding:6px 10px;vertical-align:top">ΔР max = [?] мм.рт.ст; дуга лівостороння; коарктації аорти немає</td></tr>
 </table>
 
 <h3>Додаткові дані</h3>
-<p>[заповни за диктовкою; якщо нічого не продиктовано — [не вказано]]</p>
+<p>[заповни за диктовкою; якщо нічого не продиктовано — лиши порожнім]</p>
 
 <h3>Висновок</h3>
-<p>[за диктовкою; якщо висновок не продиктовано — «Даних за структурну патологію серця немає»]</p>
+<p>[сформулюй за фактичними знахідками; норм-варіант — «Даних за структурну патологію серця немає»]</p>
+
+<p><strong>Лікар-кардіолог дитячий Шипов Д.О.</strong></p>
 
 Нічого, крім цього HTML-фрагмента, не виводь.`;
 
@@ -583,11 +589,12 @@ const SYSTEM_PROMPT_TESTER2 = `Ти — медичний редактор, що 
 Нічого, крім обраного HTML-фрагмента, не виводь.`;
 
 // Вибір промпта за логіном Basic Auth. Для test2 — мультишаблон (черево/щитоподібна/дефолт);
-// для test3 — щитоподібна залоза; для всіх інших (test і нові логіни) — стандартний SYSTEM_PROMPT.
-// SYSTEM_PROMPT_TESTER3 (ехокардіографія) наразі не призначений жодному логіну — лишено на майбутнє.
+// для test3 — дитяча ехокардіографія таблицями; для всіх інших (test і нові логіни) — SYSTEM_PROMPT.
+// SYSTEM_PROMPT_TESTER4 (щитоподібна) наразі не призначений жодному логіну (щитоподібну також
+// покриває test2) — лишено на майбутнє.
 const PROMPTS_BY_USER = {
   test2: SYSTEM_PROMPT_TESTER2, // черево + щитоподібна + дефолт
-  test3: SYSTEM_PROMPT_TESTER4, // щитоподібна залоза
+  test3: SYSTEM_PROMPT_TESTER3, // дитяча ехокардіографія
 };
 
 // ───────────────────────── Транскрипція (Whisper через Groq) ─────────────────────────
