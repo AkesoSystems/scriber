@@ -40,6 +40,16 @@
   .err{color:#B3372F;}
   tr.warn{background:#FFF6E6;}
   tr.bad{background:#FBEAE8;}
+  /* Тестовий період */
+  .t-ok{color:var(--teal-dark);font-weight:600;}
+  .t-warn{color:#9B6A16;font-weight:700;}
+  .t-over{color:#B3372F;font-weight:700;}
+  .t-idle{color:var(--muted);}
+  .t-btn{font-family:var(--sans);font-size:12px;font-weight:600;padding:5px 9px;margin-right:5px;
+    border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--teal-dark);cursor:pointer;white-space:nowrap;}
+  .t-btn:hover{background:var(--teal);color:#fff;border-color:var(--teal);}
+  .t-btn.t-reset{color:#B3372F;}
+  .t-btn.t-reset:hover{background:#B3372F;color:#fff;border-color:#B3372F;}
   .minibars{max-width:560px;}
   .minibar{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px;}
   .minibar .lbl{width:140px;color:var(--muted);}
@@ -101,7 +111,7 @@
     <span class="dot2 amber"></span>3+ дн тиші <span class="dot2 red"></span>7+ дн.
     «Серія днів» — скільки днів поспіль робив протоколи. «Днів тиша» — скільки днів від останнього протоколу.</p>
   <table id="engTable">
-    <thead><tr><th>Лікар</th><th>Останній протокол</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th></tr></thead>
+    <thead><tr><th>Лікар</th><th>Останній протокол</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th><th>Тест (днів)</th><th>Керування</th></tr></thead>
     <tbody id="engBody"></tbody>
   </table>
 
@@ -321,11 +331,20 @@ function load(user){
           const last = e.lastActiveDay || "—";
           const dsa = e.daysSinceActive === null ? "—" : e.daysSinceActive;
           const rate = e.avgRating != null ? "★ " + e.avgRating : "—";
-          return '<tr class="' + cls + '"><td><b>' + e.user + "</b></td><td>" + last +
+          const u = esc(e.user);
+          let trial;
+          if (!e.trialStarted) trial = '<span class="t-idle">' + e.trialDaysLeft + ' (не почато)</span>';
+          else if (e.trialExpired) trial = '<span class="t-over">завершено</span>';
+          else trial = '<span class="' + (e.trialDaysLeft <= 3 ? "t-warn" : "t-ok") + '">' + e.trialDaysLeft + ' дн'
+                 + (e.trialBonusDays ? ' (+' + e.trialBonusDays + ')' : '') + '</span>';
+          const ctrl = '<button class="t-btn" onclick="trialAct(\'' + u + '\',\'extend\')" title="Додати довільну кількість днів">+ дні…</button>'
+                 + '<button class="t-btn t-reset" onclick="trialAct(\'' + u + '\',\'reset\')">Скинути</button>';
+          return '<tr class="' + cls + '"><td><b>' + u + "</b></td><td>" + last +
                  "</td><td>" + dsa + "</td><td>" + e.protocols7d + "</td><td>" + e.protocols30d +
-                 "</td><td>" + e.activeDaysStreak + "</td><td>" + rate + "</td><td>" + e.errorRate + "%</td></tr>";
+                 "</td><td>" + e.activeDaysStreak + "</td><td>" + rate + "</td><td>" + e.errorRate + "%</td>" +
+                 "<td>" + trial + "</td><td>" + ctrl + "</td></tr>";
         }).join("")
-      : '<tr><td colspan="8" style="color:#9AA7AE">Даних ще немає.</td></tr>';
+      : '<tr><td colspan="10" style="color:#9AA7AE">Даних ще немає.</td></tr>';
 
     // Помилки: заголовок + три розбивки міні-барами
     const errs = d.errors || { byCode:{}, byProvider:{}, byStage:{}, total:0, errorRate:0 };
@@ -348,6 +367,26 @@ function load(user){
       '<div class="card"><div class="label">Помилка</div><div class="sub">' + e.message +
       '. Відкрийте сторінку з ключем: /stats?key=ВАШ_КЛЮЧ</div></div>';
   });
+}
+
+// Адмін-керування тестовим періодом лікаря
+function trialAct(user, action){
+  let days = 7;
+  if (action === "extend"){
+    const inp = prompt("Скільки днів додати лікарю «" + user + "»?", "7");
+    if (inp === null) return;
+    days = Math.round(Number(inp));
+    if (!(days > 0 && days <= 365)){ alert("Введіть число днів від 1 до 365."); return; }
+  } else if (action === "reset"){
+    if (!confirm("Скинути тестовий період для «" + user + "»?\nВідлік почнеться заново з його наступного протоколу, бонусні дні обнуляться.")) return;
+  }
+  fetch("/api/admin/trial", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ key: KEY, user, action, days })
+  }).then(r => r.json()).then(res => {
+    if (!res.ok){ alert("Помилка: " + (res.error || "невідома")); return; }
+    load(sel.value);   // перезавантажити дашборд із оновленими днями
+  }).catch(e => alert("Помилка мережі: " + e.message));
 }
 
 sel.addEventListener("change", () => load(sel.value));

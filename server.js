@@ -136,10 +136,12 @@ function dayDiff(aKey, bKey) {
   return Math.round((Date.parse(aKey) - Date.parse(bKey)) / 86400000);
 }
 
-// ── Тестовий період: 14 днів від ПЕРШОГО протоколу кожного акаунту (логіну Basic Auth) ──
-const TRIAL_DAYS = 14;
+// ── Тестовий період: N днів від ПЕРШОГО протоколу кожного акаунту (логіну Basic Auth) ──
+// База — TRIAL_DAYS (env, дефолт 14). Адмін може коригувати персонально через події у
+// analytics.jsonl: "trial_reset" (рестарт відліку) і "trial_bonus" (value = +дні). Зберігати
+// оверайди в аналітиці зручно — файл уже на volume, тож вони переживають редеплой без нового маунта.
+const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) > 0 ? Number(process.env.TRIAL_DAYS) : 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const TRIAL_MS = TRIAL_DAYS * DAY_MS;
 
 function readAnalyticsRows() {
   try {
@@ -150,22 +152,34 @@ function readAnalyticsRows() {
   } catch (_) { return []; }
 }
 
-// Стан тестового періоду логіну: коли був перший generate_ok і скільки днів лишилось.
-function trialState(user) {
-  let firstAt = 0;
-  for (const r of readAnalyticsRows()) {
-    if (r.user === user && r.event === "generate_ok" && typeof r.t === "number" && (!firstAt || r.t < firstAt)) {
-      firstAt = r.t;
-    }
+// Синхронний запис службового рядка (адмін-оверайди періоду) — щоб відповідь одразу бачила зміну.
+function appendRowSync(row) {
+  try { fs.appendFileSync(ANALYTICS_FILE, JSON.stringify(row) + "\n"); }
+  catch (e) { console.error("[analytics] sync append не вдався:", e.message); }
+}
+
+// Стан тестового періоду логіну з урахуванням адмін-оверайдів.
+function trialState(user, rows) {
+  rows = rows || readAnalyticsRows();
+  // Останній reset для цього юзера «переводить годинник»: ранні протоколи й бонуси не рахуються.
+  let resetAt = 0;
+  for (const r of rows) {
+    if (r.user === user && r.event === "trial_reset" && typeof r.t === "number" && r.t > resetAt) resetAt = r.t;
   }
-  if (!firstAt) return { started: false, expired: false, daysRemaining: TRIAL_DAYS, limitDays: TRIAL_DAYS, firstAt: 0 };
-  const remainingMs = TRIAL_MS - (Date.now() - firstAt);
+  let firstAt = 0, bonusDays = 0;
+  for (const r of rows) {
+    if (r.user !== user || typeof r.t !== "number" || r.t < resetAt) continue;
+    if (r.event === "generate_ok" && (!firstAt || r.t < firstAt)) firstAt = r.t;
+    else if (r.event === "trial_bonus" && typeof r.value === "number") bonusDays += r.value;
+  }
+  const limitDays = Math.max(0, TRIAL_DAYS + bonusDays);
+  if (!firstAt) return { started: false, expired: false, daysRemaining: limitDays, limitDays, bonusDays, firstAt: 0 };
+  const remainingMs = limitDays * DAY_MS - (Date.now() - firstAt);
   return {
     started: true,
     expired: remainingMs <= 0,
     daysRemaining: Math.max(0, Math.ceil(remainingMs / DAY_MS)),
-    limitDays: TRIAL_DAYS,
-    firstAt,
+    limitDays, bonusDays, firstAt,
   };
 }
 
@@ -173,6 +187,26 @@ function trialState(user) {
 app.get("/api/trial", (req, res) => {
   const user = getAuthUser(req);
   res.json(Object.assign({ user }, trialState(user)));
+});
+
+// ── Адмін-керування періодом (за ADMIN_KEY): продовжити (+дні) / скинути ──
+app.post("/api/admin/trial", (req, res) => {
+  if (!ADMIN_KEY_OK) return res.status(503).json({ error: "stats_disabled" });
+  const key = (req.body && req.body.key) || req.query.key;
+  if (key !== ADMIN_KEY) return res.status(403).json({ error: "forbidden" });
+  const user = (req.body && req.body.user || "").toString().slice(0, 40);
+  const action = req.body && req.body.action;
+  if (!user) return res.status(400).json({ error: "no_user" });
+  if (action === "extend") {
+    const days = Math.round(Number(req.body.days) || 7);
+    if (!(days > 0 && days <= 365)) return res.status(400).json({ error: "bad_days" });
+    appendRowSync({ t: Date.now(), uid: "admin", user, event: "trial_bonus", value: days });
+  } else if (action === "reset") {
+    appendRowSync({ t: Date.now(), uid: "admin", user, event: "trial_reset", value: null });
+  } else {
+    return res.status(400).json({ error: "bad_action" });
+  }
+  res.json({ ok: true, user, trial: trialState(user) });
 });
 
 app.get("/stats", (req, res) => {
@@ -228,6 +262,8 @@ app.get("/api/stats", (req, res) => {
   }
 
   for (const r of rows) {
+    // Адмін-оверайди періоду — службові рядки; у статистику не йдуть (їх читає trialState).
+    if (r.event === "trial_bonus" || r.event === "trial_reset") continue;
     uniq.add(r.uid);
     const d = dayKey(r.t);
     days[d] = days[d] || { visits: 0, recordings: 0, protocols: 0, exports: 0 };
@@ -284,6 +320,7 @@ app.get("/api/stats", (req, res) => {
     const uu = users[user] || {};
     const protocols = uu.protocols || 0;
     const errors = uu.errors || 0;
+    const ts = trialState(user, rows);
     return {
       user,
       lastActiveDay,
@@ -293,6 +330,11 @@ app.get("/api/stats", (req, res) => {
       protocolsTotal: protocols,
       errorRate: (protocols + errors) ? Math.round(errors / (protocols + errors) * 100) : 0,
       avgRating: uu.ratingCount ? Math.round(uu.ratingTotal / uu.ratingCount * 10) / 10 : null,
+      trialStarted: ts.started,
+      trialExpired: ts.expired,
+      trialDaysLeft: ts.daysRemaining,
+      trialLimitDays: ts.limitDays,
+      trialBonusDays: ts.bonusDays,
     };
   }).sort((a, b) => {
     if (a.daysSinceActive === null) return 1;   // хто жодного протоколу — в кінець
