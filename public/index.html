@@ -116,8 +116,8 @@
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
     </div>
-    <div class="hint">Працює у Chrome, Safari та Edge (зокрема на iPhone). Натисніть «Почати запис», диктуйте українською;
-      цифри й розміри називайте чітко («сто сорок два міліметри»). Текст зʼявиться через кілька секунд після «Зупинити запис».
+    <div class="hint">Натисніть «Почати запис», диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
+      У Chrome/Edge текст видно наживо під час диктовки; після «Зупинити запис» він автоматично уточнюється (Whisper).
       Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
   </section>
 
@@ -161,14 +161,20 @@
   const docBtn = document.getElementById("docBtn");
   const pdfBtn = document.getElementById("pdfBtn");
 
-  let finalText = "";
+  let finalText = "";        // підтверджений текст (з Whisper) — іде в протокол
+  let liveText = "";         // живий прев'ю поточного запису (Web Speech), замінюється Whisper'ом
   let recording = false;
   let mediaRec = null;
   let micStream = null;
   let chunks = [];
-  let transcribing = null; // проміс, поки триває розпізнавання після «Зупинити»
+  let sr = null;             // Web Speech — лише для динамічного прев'ю під час диктовки
+  let transcribing = null;   // проміс, поки триває розпізнавання після «Зупинити»
   let recStartedAt = 0;
   let stickToBottom = true;
+
+  // Web Speech показує слова наживо під час диктовки (Chrome/Edge). У Safari його нема —
+  // там просто не буде живого прев'ю, але фінальний текст усе одно дасть Whisper.
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   // Якщо людина прокрутила вгору — не смикаємо екран; повернулась донизу — знову автоскрол
   screen.addEventListener("scroll", () => {
@@ -188,15 +194,16 @@
 
   function render(interim){
     screen.innerHTML = "";
-    screen.append(document.createTextNode(finalText));
-    if (interim){
+    if (finalText) screen.append(document.createTextNode(finalText));
+    const preview = (liveText + (interim || "")).trim();
+    if (preview){
       const s = document.createElement("span");
       s.className = "interim";
-      s.textContent = interim;
+      s.textContent = (finalText ? " " : "") + preview;
       screen.append(s);
     }
     if (stickToBottom) screen.scrollTop = screen.scrollHeight;
-    genBtn.disabled = !finalText.trim();
+    genBtn.disabled = !(finalText.trim() || recording || liveText.trim());
   }
 
   // Найкращий підтримуваний формат запису (opus компактний; Safari віддає mp4).
@@ -204,6 +211,32 @@
     const opts = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
     for (const m of opts){ if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; }
     return "";
+  }
+
+  // Живий прев'ю через Web Speech: показує слова динамічно під час диктовки.
+  // Це лише візуальний прев'ю — авторитетний текст дасть Whisper після «Зупинити».
+  function startLivePreview(){
+    if (!SR) return; // напр. Safari — без живого прев'ю
+    try{
+      sr = new SR();
+      sr.lang = "uk-UA";
+      sr.continuous = true;
+      sr.interimResults = true;
+      sr.onresult = (e) => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++){
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) liveText += t + " ";
+          else interim += t;
+        }
+        if (recording) render(interim);
+      };
+      sr.onend = () => { if (recording) { try{ sr.start(); }catch(_){} } }; // автоперезапуск
+      sr.start();
+    }catch(_){ sr = null; }
+  }
+  function stopLivePreview(){
+    if (sr){ try{ sr.onend = null; sr.stop(); }catch(_){} sr = null; }
   }
 
   async function startRec(){
@@ -214,16 +247,19 @@
       return;
     }
     chunks = [];
+    liveText = "";
     const mime = pickMime();
     mediaRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
     mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
     mediaRec.start();
+    startLivePreview(); // динамічний текст на екрані під час диктовки
     recording = true;
     recStartedAt = Date.now();
     track("rec_start");
     recBtn.classList.add("recording");
     recBtn.innerHTML = '<span class="dot"></span>Зупинити запис';
     setStatus("Йде запис — диктуйте.");
+    render("");
   }
 
   // Зупиняє запис і розпізнає аудіо через Whisper. Повертає проміс, що
@@ -234,15 +270,17 @@
     if (recStartedAt){ track("rec_stop", Math.round((Date.now() - recStartedAt) / 1000)); recStartedAt = 0; }
     recBtn.classList.remove("recording");
     recBtn.innerHTML = '<span class="dot"></span>Почати запис';
+    stopLivePreview();
+    render(""); // показати накопичену чернетку, поки чекаємо точний текст від Whisper
 
     transcribing = new Promise((resolve) => {
       if (!mediaRec){ resolve(); return; }
       mediaRec.onstop = async () => {
         if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
         const blob = new Blob(chunks, { type: (mediaRec && mediaRec.mimeType) || "audio/webm" });
-        if (!blob.size){ setStatus("Запис порожній — спробуйте ще раз.", true); resolve(); return; }
+        if (!blob.size){ liveText = ""; render(""); setStatus("Запис порожній — спробуйте ще раз.", true); resolve(); return; }
         try{
-          setStatus("Розпізнаю мовлення…");
+          setStatus("Уточнюю текст (Whisper)…");
           const t0 = Date.now();
           const fd = new FormData();
           fd.append("audio", blob, "audio.webm");
@@ -252,12 +290,17 @@
           track("transcribe", Math.round((Date.now() - t0) / 1000));
           const text = (data.text || "").trim();
           if (text) finalText += (finalText ? " " : "") + text;
+          liveText = ""; // точний текст Whisper замінює живу чернетку
           render("");
           setStatus(finalText.trim()
             ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
             : "Нічого не розпізнано — спробуйте ще раз.", !finalText.trim());
         }catch(err){
-          setStatus(err.message || "Помилка розпізнавання", true);
+          // Whisper не вдався — лишаємо чернетку Web Speech як запасний текст, щоб не втратити диктовку
+          if (liveText.trim()){ finalText += (finalText ? " " : "") + liveText.trim(); }
+          liveText = "";
+          render("");
+          setStatus((err.message || "Помилка розпізнавання") + (finalText.trim() ? " — залишено чернетку, перевірте текст." : ""), true);
         }finally{
           resolve();
         }
@@ -270,7 +313,7 @@
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
 
   clearBtn.addEventListener("click", () => {
-    finalText = ""; render("");
+    finalText = ""; liveText = ""; render("");
   });
 
   genBtn.addEventListener("click", async () => {
