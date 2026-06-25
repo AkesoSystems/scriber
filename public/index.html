@@ -117,7 +117,7 @@
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
     </div>
     <div class="hint">Натисніть «Почати запис», диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
-      Текст з'являється блоками під час диктовки і автоматично уточнюється після «Зупинити запис».
+      Текст з'являється блоками під час диктовки; після «Зупинити запис» додається останній фрагмент.
       Сумнівні місця в протоколі буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
   </section>
 
@@ -161,21 +161,20 @@
   const docBtn = document.getElementById("docBtn");
   const pdfBtn = document.getElementById("pdfBtn");
 
-  let finalText = "";        // підтверджений текст (повний Whisper-прохід) — іде в протокол
-  let liveText = "";         // живий прев'ю: накопичені сегменти Whisper під час диктовки
+  let finalText = "";        // підтверджений текст (зібраний із сегментів) — іде в протокол
+  let liveText = "";         // живий текст поточного запису (накопичені сегменти Whisper)
   let recording = false;
-  let mediaRec = null;       // безперервний запис — для точного фінального проходу
   let micStream = null;
-  let chunks = [];
-  let segRec = null;         // окремий рекордер для коротких сегментів живого прев'ю
+  let segRec = null;         // рекордер коротких сегментів (~8 с)
   let segChunks = [];
   let segTimer = null;
-  let acceptLive = false;    // чи приймати ще сегменти (вимикаємо на «Зупинити»)
-  let transcribing = null;   // проміс, поки триває фінальне розпізнавання після «Зупинити»
+  let transcribing = null;   // проміс, що резолвиться, коли фінальний сегмент дописано
+  let finalizeResolve = null;
   let recStartedAt = 0;
   let stickToBottom = true;
 
-  const SEG_MS = 8000;       // довжина сегмента живого прев'ю (~8 с)
+  const SEG_MS = 8000;       // довжина сегмента (~8 с)
+  const SEG_BPS = 24000;     // бітрейт opus (мовна якість) — тримає файли крихітними
 
   // Якщо людина прокрутила вгору — не смикаємо екран; повернулась донизу — знову автоскрол
   screen.addEventListener("scroll", () => {
@@ -214,36 +213,45 @@
     return "";
   }
 
-  // Живий прев'ю через Groq: пишемо короткими сегментами (~8 с), кожен одразу
-  // транскрибуємо й дописуємо. Працює в усіх браузерах (зокрема Safari). Це прев'ю —
-  // на «Зупинити» весь запис ще раз проганяється цілком для максимальної точності.
+  // Живий текст через Groq: пишемо короткими сегментами (~8 с), кожен одразу
+  // транскрибуємо й дописуємо. Працює в усіх браузерах (зокрема Safari). Жодних
+  // великих файлів — тому нема 413, і довгі обстеження фіналізуються миттєво.
   function startSegment(){
     if (!micStream) return;
     segChunks = [];
     const mime = pickMime();
-    segRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+    const opts = { audioBitsPerSecond: SEG_BPS };
+    if (mime) opts.mimeType = mime;
+    segRec = new MediaRecorder(micStream, opts);
     segRec.ondataavailable = (e) => { if (e.data && e.data.size) segChunks.push(e.data); };
     segRec.onstop = async () => {
+      const wasRecording = recording;
       const blob = new Blob(segChunks, { type: (segRec && segRec.mimeType) || "audio/webm" });
-      if (recording) startSegment();         // одразу наступний сегмент, щоб не губити мову
-      if (!acceptLive || !blob.size) return; // після «Зупинити» сегменти ігноруємо
-      try{
-        const fd = new FormData();
-        fd.append("audio", blob, "seg.webm");
-        const r = await fetch("/api/transcribe", { method: "POST", body: fd });
-        const data = await r.json();
-        if (acceptLive && r.ok && data.text){
-          liveText += (liveText ? " " : "") + data.text.trim();
-          render("");
-        }
-      }catch(_){ /* сегмент-прев'ю не критичний — фінал все одно дасть точний текст */ }
+      if (wasRecording) startSegment();      // ще пишемо — одразу наступний сегмент
+      if (blob.size){
+        if (!wasRecording) setStatus("Завершую розпізнавання…");
+        try{
+          const fd = new FormData();
+          fd.append("audio", blob, "seg.webm");
+          const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+          const data = await r.json();
+          if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); }
+        }catch(_){ /* окремий сегмент не критичний */ }
+      }
+      if (!wasRecording) finalizeText();     // це був останній сегмент → фіналізуємо
     };
     segRec.start();
   }
-  function stopSegments(){
-    if (segTimer){ clearInterval(segTimer); segTimer = null; }
-    if (segRec && segRec.state === "recording"){ try{ segRec.stop(); }catch(_){} }
-    segRec = null;
+
+  function finalizeText(){
+    if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (liveText.trim()) finalText += (finalText ? " " : "") + liveText.trim();
+    liveText = "";
+    render("");
+    setStatus(finalText.trim()
+      ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
+      : "Нічого не розпізнано — спробуйте ще раз.", !finalText.trim());
+    if (finalizeResolve){ finalizeResolve(); finalizeResolve = null; }
   }
 
   async function startRec(){
@@ -253,15 +261,9 @@
       setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
       return;
     }
-    chunks = [];
     liveText = "";
-    acceptLive = true;
-    const mime = pickMime();
-    mediaRec = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
-    mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    mediaRec.start();                                  // безперервний запис для точного фіналу
-    startSegment();                                    // перший сегмент живого прев'ю
-    segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле
+    startSegment();                                    // перший сегмент
+    segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле + стартує наступний
       if (segRec && segRec.state === "recording"){ try{ segRec.stop(); }catch(_){} }
     }, SEG_MS);
     recording = true;
@@ -273,51 +275,23 @@
     render("");
   }
 
-  // Зупиняє запис і розпізнає аудіо через Whisper. Повертає проміс, що
-  // резолвиться, коли finalText оновлено (щоб «Сформувати» міг дочекатись).
+  // Зупиняє запис; останній сегмент дотранскрибовується, тоді finalizeText().
+  // Повертає проміс, що резолвиться по завершенні (щоб «Сформувати» міг дочекатись).
   function stopRec(){
     if (!recording) return transcribing || Promise.resolve();
     recording = false;
     if (recStartedAt){ track("rec_stop", Math.round((Date.now() - recStartedAt) / 1000)); recStartedAt = 0; }
     recBtn.classList.remove("recording");
     recBtn.innerHTML = '<span class="dot"></span>Почати запис';
-    acceptLive = false; // більше не приймаємо живі сегменти — далі точний фінальний прохід
-    stopSegments();
-    render(""); // показати накопичену чернетку, поки чекаємо точний текст від Whisper
+    if (segTimer){ clearInterval(segTimer); segTimer = null; }
 
     transcribing = new Promise((resolve) => {
-      if (!mediaRec){ resolve(); return; }
-      mediaRec.onstop = async () => {
-        if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-        const blob = new Blob(chunks, { type: (mediaRec && mediaRec.mimeType) || "audio/webm" });
-        if (!blob.size){ liveText = ""; render(""); setStatus("Запис порожній — спробуйте ще раз.", true); resolve(); return; }
-        try{
-          setStatus("Уточнюю текст (Whisper)…");
-          const t0 = Date.now();
-          const fd = new FormData();
-          fd.append("audio", blob, "audio.webm");
-          const r = await fetch("/api/transcribe", { method: "POST", body: fd });
-          const data = await r.json();
-          if (!r.ok) throw new Error(data.error || "Помилка розпізнавання");
-          track("transcribe", Math.round((Date.now() - t0) / 1000));
-          const text = (data.text || "").trim();
-          if (text) finalText += (finalText ? " " : "") + text;
-          liveText = ""; // точний текст Whisper замінює живу чернетку
-          render("");
-          setStatus(finalText.trim()
-            ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
-            : "Нічого не розпізнано — спробуйте ще раз.", !finalText.trim());
-        }catch(err){
-          // Whisper не вдався — лишаємо чернетку Web Speech як запасний текст, щоб не втратити диктовку
-          if (liveText.trim()){ finalText += (finalText ? " " : "") + liveText.trim(); }
-          liveText = "";
-          render("");
-          setStatus((err.message || "Помилка розпізнавання") + (finalText.trim() ? " — залишено чернетку, перевірте текст." : ""), true);
-        }finally{
-          resolve();
-        }
-      };
-      try{ mediaRec.stop(); }catch(_){ resolve(); }
+      finalizeResolve = resolve;
+      if (segRec && segRec.state === "recording"){
+        try{ segRec.stop(); }catch(_){ finalizeText(); }   // onstop (wasRecording=false) → finalizeText()
+      }else{
+        finalizeText();
+      }
     });
     return transcribing;
   }

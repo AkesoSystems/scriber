@@ -4,6 +4,7 @@
 
 const express = require("express");
 const multer = require("multer");
+const Anthropic = require("@anthropic-ai/sdk");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -391,6 +392,66 @@ app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
   }
 });
 
+// Прибирає можливі markdown-обгортки ```html ... ``` навколо HTML-фрагмента.
+function stripFences(s) {
+  return s.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "");
+}
+
+// Клієнт Anthropic API — створюється лише якщо заданий ключ (інакше працює fallback на CLI).
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+
+// Формування протоколу через Claude API (Opus 4.8). Без лімітів підписки Max,
+// швидко й надійно на довгих обстеженнях. Стрімінг — щоб не впертись у таймаут.
+async function protocolViaAPI(systemPrompt, raw, res) {
+  try {
+    const stream = anthropic.messages.stream({
+      model: "claude-opus-4-8",
+      max_tokens: 8000,
+      output_config: { effort: "low" }, // задача — структурування, не глибокі міркування
+      system: systemPrompt,
+      messages: [{ role: "user", content: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }],
+    });
+    const msg = await stream.finalMessage();
+    const text = (msg.content || [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+    if (!text) {
+      return res.status(500).json({ error: "Claude (API) не повернув результат. Спробуйте ще раз." });
+    }
+    res.json({ html: stripFences(text) });
+  } catch (e) {
+    res.status(500).json({ error: "Помилка Claude API: " + ((e && e.message) || "невідома помилка") });
+  }
+}
+
+// Резервний шлях: формування через `claude -p` на підписці Max (якщо ключа API немає).
+function protocolViaCLI(systemPrompt, raw, res) {
+  const prompt = systemPrompt + "\n\n--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw;
+  const child = spawn("claude", ["-p", "--output-format", "text"], { env: process.env, timeout: 180000 });
+  let out = "";
+  let err = "";
+  child.stdout.on("data", (d) => (out += d));
+  child.stderr.on("data", (d) => (err += d));
+  child.on("error", () => {
+    res.status(500).json({
+      error: "Не вдалося запустити Claude Code. Перевірте: npm i -g @anthropic-ai/claude-code і логін через підписку (команда: claude).",
+    });
+  });
+  child.on("close", (code) => {
+    if (res.headersSent) return;
+    if (code !== 0 || !out.trim()) {
+      return res.status(500).json({
+        error: "Claude не повернув результат. " + (err.trim() ? "Деталі: " + err.trim().slice(0, 300) : "Можливо, вичерпано ліміт підписки Max — спробуйте пізніше."),
+      });
+    }
+    res.json({ html: stripFences(out) });
+  });
+  child.stdin.write(prompt);
+  child.stdin.end();
+}
+
 app.post("/api/protocol", (req, res) => {
   const raw = (req.body && req.body.text || "").trim();
   if (!raw) {
@@ -399,39 +460,12 @@ app.post("/api/protocol", (req, res) => {
 
   const user = getAuthUser(req);
   const systemPrompt = PROMPTS_BY_USER[user] || SYSTEM_PROMPT;
-  const prompt = systemPrompt + "\n\n--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw;
 
-  // claude -p читає промпт зі stdin; --output-format text повертає чистий текст
-  const child = spawn("claude", ["-p", "--output-format", "text"], {
-    env: process.env,
-    timeout: 180000,
-  });
-
-  let out = "";
-  let err = "";
-  child.stdout.on("data", (d) => (out += d));
-  child.stderr.on("data", (d) => (err += d));
-
-  child.on("error", () => {
-    res.status(500).json({
-      error: "Не вдалося запустити Claude Code. Перевірте: npm i -g @anthropic-ai/claude-code і логін через підписку (команда: claude).",
-    });
-  });
-
-  child.on("close", (code) => {
-    if (res.headersSent) return;
-    if (code !== 0 || !out.trim()) {
-      return res.status(500).json({
-        error: "Claude не повернув результат. " + (err.trim() ? "Деталі: " + err.trim().slice(0, 300) : "Можливо, вичерпано ліміт підписки Max — спробуйте пізніше."),
-      });
-    }
-    // Прибираємо можливі markdown-обгортки ```html ... ```
-    const html = out.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "");
-    res.json({ html });
-  });
-
-  child.stdin.write(prompt);
-  child.stdin.end();
+  if (anthropic) {
+    protocolViaAPI(systemPrompt, raw, res);
+  } else {
+    protocolViaCLI(systemPrompt, raw, res);
+  }
 });
 
 app.listen(PORT, () => {
