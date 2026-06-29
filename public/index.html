@@ -214,6 +214,10 @@
     </div>
     <div class="hint">Диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
       Текст зʼявляється блоками під час диктовки. Сумнівні місця буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
+    <div id="pasteWrap" hidden style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
+      <textarea id="pasteBox" rows="4" placeholder="Тестовий акаунт: встав сюди текст диктовки (поганий або ідеальний) і натисни «Згенерувати з тексту»" style="width:100%;font:14px/1.45 inherit;padding:8px;border:1px solid #ccc;border-radius:8px;resize:vertical;box-sizing:border-box"></textarea>
+      <button id="pasteGenBtn" class="btn-ghost" style="align-self:flex-start">Згенерувати з тексту</button>
+    </div>
   </section>
 
   <section class="panel doc-panel">
@@ -264,6 +268,9 @@
   const clearBtn = document.getElementById("clearBtn");
   const tmplSel = document.getElementById("tmplSel");
   const genBtn = document.getElementById("genBtn");
+  const pasteWrap = document.getElementById("pasteWrap");
+  const pasteBox = document.getElementById("pasteBox");
+  const pasteGenBtn = document.getElementById("pasteGenBtn");
   const doc = document.getElementById("doc");
   const statusEl = document.getElementById("status");
   const docBtn = document.getElementById("docBtn");
@@ -562,6 +569,13 @@
     }
   });
 
+  // Тестовий акаунт: згенерувати протокол із вставленого тексту (без диктовки) — реюз потоку genBtn.
+  pasteGenBtn.addEventListener("click", () => {
+    const t = pasteBox.value.trim();
+    if (!t){ setStatus("Встав текст диктовки для генерації.", true); return; }
+    liveText = ""; finalText = t; render(""); genBtn.click();
+  });
+
   // ── Тестовий період (14 днів від першого протоколу) ──
   function renderTrial(d){
     if (!d) return;
@@ -599,6 +613,7 @@
           tmplSel.dataset.filled = "1";
         }
         tmplSel.hidden = false;
+        pasteWrap.hidden = false;   // тестовому акаунту — поле «встав текст → згенерувати»
       }
       if (d.expired) lockForTrial();
     }catch(_){ /* без лічильника — не критично */ }
