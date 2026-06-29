@@ -207,6 +207,12 @@
   <button class="logout" id="logoutBtn" type="button" hidden>Вийти</button>
 </header>
 
+<div id="draftBar" hidden role="alert" style="max-width:1360px;margin:14px auto 0;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--amber-soft);border:1px solid var(--amber-line);color:var(--amber);font-size:13px">
+  <span>Знайдено незбережену чернетку від <strong id="draftTime"></strong> — відновити її?</span>
+  <button id="draftRestore" class="btn-ghost" style="padding:7px 14px">Відновити</button>
+  <button id="draftDiscard" class="btn-ghost" style="padding:7px 14px">Відхилити</button>
+</div>
+
 <div class="wrap">
   <section class="panel">
     <div class="panel-h">Диктовка</div>
@@ -305,6 +311,47 @@
   let stickToBottom = true;
 
   const SEG_MS = 8000;       // довжина сегмента (~8 с)
+
+  // ── Чернетка у sessionStorage: переживає F5 / відновлення вкладки, але очищається при
+  //    закритті вкладки → НЕ лишає клінічний текст наступному лікарю на спільному компі.
+  //    НЕтихо: при відкритті питаємо явно; чистимо при копіюванні / Word / PDF / «Очистити». ──
+  const DRAFT_KEY = "uzd_draft";
+  const DRAFT_TTL_MS = 2 * 60 * 60 * 1000;   // 2 год — старіші чернетки не пропонуємо
+  let draftTimer = null;
+  let droppedSegs = 0;                        // аудіо-сегменти, що не дійшли (мережа)
+  function saveDraft(){
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      try{
+        const dictation = (finalText + (finalText && liveText ? " " : "") + liveText).trim();
+        const protocol = doc.innerHTML.trim();
+        if (!dictation && !protocol){ sessionStorage.removeItem(DRAFT_KEY); return; }
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ t: Date.now(), dictation, protocol }));
+      }catch(_){ /* сховище недоступне — не критично */ }
+    }, 600);
+  }
+  function wipeDraft(){
+    try{ sessionStorage.removeItem(DRAFT_KEY); }catch(_){}
+    if (draftTimer){ clearTimeout(draftTimer); draftTimer = null; }
+  }
+  function maybeOfferRestore(){
+    let d = null;
+    try{ d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); }catch(_){ d = null; }
+    if (!d || (!d.dictation && !d.protocol)) return;
+    if (!d.t || Date.now() - d.t > DRAFT_TTL_MS){ wipeDraft(); return; }
+    const dt = new Date(d.t);
+    const hhmm = String(dt.getHours()).padStart(2, "0") + ":" + String(dt.getMinutes()).padStart(2, "0");
+    document.getElementById("draftTime").textContent = hhmm;
+    const bar = document.getElementById("draftBar");
+    bar.hidden = false;
+    document.getElementById("draftRestore").onclick = () => {
+      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
+      if (d.protocol){ doc.innerHTML = d.protocol; showFlagNav(); }
+      bar.hidden = true;
+      setStatus("Чернетку відновлено. Перевірте текст перед формуванням / копіюванням.");
+    };
+    document.getElementById("draftDiscard").onclick = () => { wipeDraft(); bar.hidden = true; };
+  }
   const SEG_BPS = 24000;     // бітрейт opus (мовна якість) — тримає файли крихітними
 
   // Секундомір: час запису + час розпізнавання
@@ -452,8 +499,12 @@
           fd.append("uid", uid);
           const r = await fetch("/api/transcribe", { method: "POST", body: fd });
           const data = await r.json();
-          if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); }
-        }catch(_){ /* окремий сегмент не критичний */ }
+          if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); saveDraft(); }
+        }catch(_){
+          // Сегмент не дійшов (мережа) — НЕ ховаємо тихо: рахуємо й показуємо, щоб лікар передиктував.
+          droppedSegs++;
+          setStatus("⚠ " + droppedSegs + " фрагмент(и) не розпізнано (мережа?) — передиктуйте пропущене перед формуванням протоколу.", true);
+        }
       }
       if (!wasRecording) finalizeText();     // це був останній сегмент → фіналізуємо
     };
@@ -467,9 +518,11 @@
     render("");
     const transSec = recStopAt ? Math.max(0, Math.round((Date.now() - recStopAt) / 1000)) : 0;
     timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнавання " + transSec + "с";
-    setStatus(finalText.trim()
-      ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
-      : "Нічого не розпізнано — спробуйте ще раз.", !finalText.trim());
+    setStatus(droppedSegs
+      ? "⚠ " + droppedSegs + " фрагмент(и) не розпізнано (мережа?) — передиктуйте пропущене перед формуванням протоколу."
+      : finalText.trim() ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
+      : "Нічого не розпізнано — спробуйте ще раз.", droppedSegs ? true : !finalText.trim());
+    saveDraft();
     if (finalizeResolve){ finalizeResolve(); finalizeResolve = null; }
   }
 
@@ -480,7 +533,7 @@
       setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
       return;
     }
-    liveText = "";
+    liveText = ""; droppedSegs = 0;
     startLevel(micStream);                             // живий рівень мікрофона
     startSegment();                                    // перший сегмент
     segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле + стартує наступний
@@ -526,7 +579,7 @@
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
 
   clearBtn.addEventListener("click", () => {
-    finalText = ""; liveText = ""; if (!recording) timerEl.textContent = ""; render("");
+    finalText = ""; liveText = ""; droppedSegs = 0; if (!recording) timerEl.textContent = ""; render(""); wipeDraft();
   });
 
   genBtn.addEventListener("click", async () => {
@@ -559,6 +612,7 @@
       doc.innerHTML = data.html.replace(/\[\?\]/g, '<span class="flag">[?]</span>');
       const flagCnt = doc.querySelectorAll(".flag").length;
       showFlagNav();
+      saveDraft();
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік 14 днів → оновлюємо лічильник
       setStatus(flagCnt
@@ -632,6 +686,10 @@
     }catch(_){ /* без лічильника — не критично */ }
   }
   loadTrial();
+
+  // ── Чернетка: ручні правки протоколу теж зберігаємо; потім нетихо пропонуємо відновлення ──
+  doc.addEventListener("input", saveDraft);
+  maybeOfferRestore();
 
   // ── Вихід з акаунту (Basic Auth не має справжнього logout — best-effort) ──
   logoutBtn.hidden = false;
@@ -708,6 +766,7 @@
       ta.select(); document.execCommand("copy"); ta.remove();
     }
     track("export_copy");
+    wipeDraft();                         // протокол у лікаря → чистимо чернетку (PHI-гігієна)
     setStatus("Протокол скопійовано (з таблицями) — можна вставляти у свою МІС чи документ.");
     showRating();
   });
@@ -728,6 +787,7 @@
     a.click();
     URL.revokeObjectURL(a.href);
     track("export_word");
+    wipeDraft();
     showRating();
   });
 
@@ -736,6 +796,7 @@
     if (!doc.innerHTML.trim()) return setStatus("Документ порожній.", true);
     track("export_pdf");
     window.print();
+    wipeDraft();
     showRating();
   });
 })();
