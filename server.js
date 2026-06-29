@@ -939,44 +939,62 @@ const SYSTEM_PROMPT_DOLHUSHYNA_THYROID = `Ти — медичний редакт
    - Є ВУЗОЛ/ВОГНИЩЕ → ЗАБОРОНЕНО писати «без ознак структурної патології» і «TIRADS 1». Почни з вузла: «Вузлове утворення … частки щитоподібної залози», постав названу лікарем категорію або <em>TIRADS [?]</em>; за потреби — рекомендація (ендокринолог / ТАПБ / УЗ-контроль).
    - Об'єм: «Загальний об'єм в межах вікової норми» додавай ЛИШЕ якщо лікар підтвердив норму АБО назвав вікову норму і об'єм у неї вкладається; інакше про норму об'єму НЕ згадуй.
    - Кожна продиктована патологія (структура/ехогенність/лімфовузли/розташування) МАЄ бути у висновку; норм-фразу, що їй суперечить, прибери.
+7. ДВІ СТОРІНКИ — ОДИН протокол. Стор.1 = наративна форма, стор.2 = детальна сітка (між ними <div style="page-break-before:always">). Ті самі продиктовані значення (об'єми, перешийок, структура, ехогенність, вузли) і ВИСНОВОК мають ЗБІГАТИСЯ на обох сторінках: сформуй висновок ОДИН раз і встав ТОЙ САМИЙ текст у [ВИСНОВОК] на стор.1 (абзац) і на стор.2 (рядок сітки «Висновок дослідження»). Якщо лікар продиктував патологію — онови відповідне поле на ОБОХ сторінках (наратив стор.1 і клітинка сітки стор.2).
 
 ФОРМАТ — ЛИШЕ HTML-фрагмент (без <html>/<head>/<body>, без markdown, без \`\`\`):
-- <h2 style="text-align:center"> — назва; під ним рядок клініки/апарата; блок полів пацієнта <p> (порожні).
-- таблиця <table style="border-collapse:collapse;width:100%;margin:0 0 12px">; клітинка <td style="border:1px solid #999;padding:4px 8px;vertical-align:top">; заголовок-секція — <td ... style="...;text-align:center;background:#f0f0f0;font-weight:bold">.
+- ВЕСЬ протокол — дві сторінки A4, кожна влазить у СВОЮ сторінку. Компактно: таблиця <table style="border-collapse:collapse;width:100%;margin:0 0 6px;font-size:11px;line-height:1.15">; клітинка <td style="border:1px solid #999;padding:1px 5px;vertical-align:top">; заголовок-секція — <td ... style="...;text-align:center;background:#f0f0f0;font-weight:bold">. Шапку/абзаци теж дрібним шрифтом (font-size:11px).
 - латина (TIRADS) — у <em>. Нічого, крім HTML-фрагмента, не виводь.
 
 ШАБЛОН (норма за замовчуванням — заповнюй на цій основі):
 
-<h2 style="text-align:center">Протокол дослідження щитоподібної залози</h2>
-<p style="text-align:center">КНП «Дитяча міська поліклініка №2» ОМР · Кабінет УЗД, м. Одеса, вул. Владислава Бувалкіна, 59 · Апарат: Toshiba Xario 100, датчик 14L5</p>
-<p><strong>Дата дослідження:</strong>&nbsp;&nbsp;&nbsp;&nbsp;<strong>ПІБ:</strong><br>
+<h2 style="text-align:center;margin:0 0 2px;font-size:15px">Протокол дослідження щитоподібної залози</h2>
+<p style="text-align:center;font-size:10px;margin:0 0 4px">КНП «Дитяча міська поліклініка №2» ОМР · Кабінет УЗД, м. Одеса, вул. Владислава Бувалкіна, 59 · Апарат: Toshiba Xario 100, датчик 14L5</p>
+<p style="font-size:11px;margin:0 0 4px"><strong>Дата дослідження:</strong>&nbsp;&nbsp;&nbsp;&nbsp;<strong>ПІБ:</strong><br>
 <strong>Дата народження:</strong>&nbsp;&nbsp;&nbsp;&nbsp;<strong>Вік:</strong>&nbsp;&nbsp;&nbsp;&nbsp;<strong>Зріст (см):</strong>&nbsp;&nbsp;&nbsp;&nbsp;<strong>Вага (кг):</strong>&nbsp;&nbsp;&nbsp;&nbsp;<strong>S ПТ (м²):</strong> [?]</p>
-<table style="border-collapse:collapse;width:100%;margin:0 0 12px">
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Щитоподібна залоза</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">розташована типово</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Загальний обʼєм</td><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">[?] см³</td><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Вікова норма</td><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">[?] см³</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Права частка</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">[?] см³ ([?] × [?] × [?] мм), (N [?] см³)</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Ліва частка</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">[?] см³ ([?] × [?] × [?] мм), (N [?] см³)</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Перешийок</td><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">[?] мм, не збільшений</td><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Контур</td><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">рівний, чіткий</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Структура</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">однорідна</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Ехогенність</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">середня</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Утворення (вузли / вогнища)</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">не виявлено</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">При КДК васкуляризація залози</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">рівномірна, в межах норми</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Регіонарні лімфовузли</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;vertical-align:top">яремні (верхні, середні, нижні), паратрахеальні, парастернальні — не збільшені</td></tr>
+<p style="font-size:11px;margin:3px 0">Акустичний доступ: без особливостей.</p>
+<p style="font-size:11px;margin:3px 0">Щитоподібна залоза розташована типово. Форма: звичайна. Анатомічна будова: класична (2 частки та перешийок).</p>
+<p style="font-size:11px;margin:3px 0"><strong>Капсула:</strong> збережена, диференціюється чітко.</p>
+<p style="font-size:11px;margin:3px 0"><strong>Контури:</strong> рівні, чіткі.</p>
+<p style="font-size:11px;margin:3px 0"><strong>Структура:</strong> однорідна.</p>
+<p style="font-size:11px;margin:3px 0"><strong>Ехогенність:</strong> середня.</p>
+<table style="border-collapse:collapse;width:100%;margin:6px 0;font-size:11px;line-height:1.15">
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top;font-weight:bold">Загальний обʼєм</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">см³</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">норма до</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">см³</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Обʼєм правої частки</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">см³</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top"></td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">мм</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Обʼєм лівої частки</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">см³</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top"></td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">мм</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Перешийок</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">мм</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">норма</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?]</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">мм</td></tr>
 </table>
-<p><strong>Висновок дослідження:</strong> [ВИСНОВОК — згенеруй за п.6; НЕ виводь цей дужковий текст]</p>
-<p><strong>Рекомендовано:</strong> УЗ щитоподібної залози профілактично 1 раз на рік.</p>
-<p>Лікар УЗД: Долгушина Альбіна Вячеславівна</p>
+<p style="font-size:11px;margin:3px 0">Кольорове допплерівське картування: в межах норми, васкуляризація паренхіми симетрична.</p>
+<p style="font-size:11px;margin:3px 0">Наявність утворень: не виявлено.</p>
+<p style="font-size:11px;margin:4px 0 2px"><strong>Висновок дослідження:</strong> [ВИСНОВОК — згенеруй за п.6; ТОЙ САМИЙ текст постав у рядок «Висновок дослідження» сітки на стор.2; НЕ виводь цей дужковий текст]</p>
+<p style="font-size:11px;margin:0 0 2px"><strong>Рекомендовано:</strong> УЗ щитоподібної залози профілактично 1 раз на рік.</p>
+<p style="font-size:11px;margin:0">Лікар УЗД: Долгушина Альбіна Вячеславівна</p>
+
+<div style="page-break-before:always;border-top:1px dashed #c0c0c0;margin:14px 0 8px"></div>
+
+<table style="border-collapse:collapse;width:100%;margin:0 0 6px;font-size:11px;line-height:1.15">
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top;font-weight:bold">Щитоподібна залоза</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">розташована типово</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Загальний обʼєм</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?] см³</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Вікова норма</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?] см³</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Права частка</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?] см³ ([?] × [?] × [?] мм), (N [?] см³)</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Ліва частка</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?] см³ ([?] × [?] × [?] мм), (N [?] см³)</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Перешийок</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">[?] мм, не збільшений</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Контур</td><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">рівний, чіткий</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Структура</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">однорідна</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Ехогенність</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">середня</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Утворення (вузли / вогнища)</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">не виявлено</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">При КДК васкуляризація залози</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">рівномірна, в межах норми</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Регіонарні лімфовузли</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">яремні (верхні, середні, нижні), паратрахеальні, парастернальні — не збільшені</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top;font-weight:bold">Висновок дослідження</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;vertical-align:top">[ВИСНОВОК — той самий текст, що на стор.1]</td></tr>
+</table>
 
 КОЛИ ПРОДИКТОВАНО ВУЗОЛ/ВОГНИЩЕ — заміни рядок «Утворення (вузли / вогнища) … не виявлено» на матрицю нижче. За замовчуванням — ОДИН стовпець N1 (як показано). ДОДАЙ стовпець N2 (далі N3, N4…) ЛИШЕ якщо продиктовано 2-й (3-й…) вузол — тоді у кожному рядку зроби окремі клітинки N1 | N2 | … замість colspan. У матриці НЕ застосовуй норм-дефолти: непродиктований ЧИСЛОВИЙ атрибут → [?], ЯКІСНИЙ → лиши ПОРОЖНІМ (вузол не має «нормальних» характеристик за замовчуванням):
-<tr><td style="border:1px solid #999;padding:4px 8px;vertical-align:top">Утворення: № вузла / вогнища</td><td colspan="3" style="border:1px solid #999;padding:4px 8px;text-align:center;background:#f0f0f0;font-weight:bold">N1</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Розміри (мм)</td><td colspan="3" style="border:1px solid #999;padding:4px 8px">[?]</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Обʼєм (см³)</td><td colspan="3" style="border:1px solid #999;padding:4px 8px">[?]</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Локалізація</td><td colspan="3" style="border:1px solid #999;padding:4px 8px"></td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Форма</td><td colspan="3" style="border:1px solid #999;padding:4px 8px"></td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Контур</td><td colspan="3" style="border:1px solid #999;padding:4px 8px"></td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Ехогенність</td><td colspan="3" style="border:1px solid #999;padding:4px 8px"></td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Структура</td><td colspan="3" style="border:1px solid #999;padding:4px 8px"></td></tr>
-<tr><td style="border:1px solid #999;padding:4px 8px">Особливості</td><td colspan="3" style="border:1px solid #999;padding:4px 8px"></td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px;vertical-align:top">Утворення: № вузла / вогнища</td><td colspan="3" style="border:1px solid #999;padding:1px 5px;text-align:center;background:#f0f0f0;font-weight:bold">N1</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Розміри (мм)</td><td colspan="3" style="border:1px solid #999;padding:1px 5px">[?]</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Обʼєм (см³)</td><td colspan="3" style="border:1px solid #999;padding:1px 5px">[?]</td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Локалізація</td><td colspan="3" style="border:1px solid #999;padding:1px 5px"></td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Форма</td><td colspan="3" style="border:1px solid #999;padding:1px 5px"></td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Контур</td><td colspan="3" style="border:1px solid #999;padding:1px 5px"></td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Ехогенність</td><td colspan="3" style="border:1px solid #999;padding:1px 5px"></td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Структура</td><td colspan="3" style="border:1px solid #999;padding:1px 5px"></td></tr>
+<tr><td style="border:1px solid #999;padding:1px 5px">Особливості</td><td colspan="3" style="border:1px solid #999;padding:1px 5px"></td></tr>
 
 ОРІЄНТИРИ НЕ-НОРМИ (підставляй ЛИШЕ якщо лікар продиктував; інакше лишай норму вище):
 - Щитоподібна залоза (розташування): розташована типово (норма) / розташована низько / оперована.

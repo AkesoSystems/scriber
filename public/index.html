@@ -67,9 +67,9 @@
   @media(max-width:560px){.byline{display:none}}
   @media(max-width:380px){.trial{font-size:10px;padding:6px 8px}}
 
-  .wrap{max-width:1180px;margin:0 auto;padding:28px;
-    display:grid;grid-template-columns:minmax(360px,440px) 1fr;gap:24px;align-items:start;}
-  @media(max-width:980px){.wrap{grid-template-columns:1fr;padding:16px;gap:16px;}}
+  .wrap{max-width:1360px;margin:0 auto;padding:20px 22px;
+    display:grid;grid-template-columns:minmax(360px,460px) 1fr;gap:22px;align-items:start;}
+  @media(max-width:980px){.wrap{grid-template-columns:1fr;padding:12px;gap:14px;}}
 
   /* ── Картка (нульове заокруглення, плоска, чіткі краї) ── */
   .panel{background:var(--paper);border:1px solid var(--line);}
@@ -78,10 +78,15 @@
     justify-content:space-between;gap:10px;}
 
   /* ── Поле диктовки: чорний «екран» з білим текстом ── */
-  .screen{font-family:var(--mono);font-size:14px;line-height:1.8;color:#F2F4F4;background:#0C0E10;
-    min-height:300px;max-height:46vh;overflow-y:auto;padding:22px;white-space:pre-wrap;}
-  .screen .interim{color:#8A949A;}
-  .screen:empty::before{content:"Натисніть «Почати запис» і диктуйте протокол…";color:#7C868C;}
+  .screen{position:relative;font-family:var(--mono);font-size:14px;line-height:1.8;color:#F2F4F4;
+    background:linear-gradient(180deg,#11151B 0%,#0A0C0F 100%);
+    min-height:320px;max-height:48vh;overflow-y:auto;padding:24px 26px;white-space:pre-wrap;
+    border-left:2px solid var(--teal);box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+    scrollbar-width:thin;scrollbar-color:#2A323B transparent;}
+  .screen::-webkit-scrollbar{width:10px;}
+  .screen::-webkit-scrollbar-thumb{background:#262E37;border:3px solid #0A0C0F;}
+  .screen .interim{color:#7E8A92;}
+  .screen:empty::before{content:"Натисніть «Почати запис» і диктуйте протокол — текст зʼявлятиметься тут у реальному часі.";color:#69737A;}
 
   .controls{padding:16px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
     border-top:1px solid var(--line);}
@@ -124,15 +129,16 @@
   .prog{height:0;background:var(--line-soft);overflow:hidden;transition:height .25s var(--ease);}
   .prog.show{height:3px;}
   .prog-bar{display:block;height:100%;width:0;background:var(--teal);transition:width .25s linear;}
-  #doc{padding:44px 54px;min-height:540px;outline:none;font-size:15.5px;line-height:1.85;color:var(--body);}
-  #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст.";
+  #doc{padding:40px 52px;min-height:540px;outline:none;font-size:15.5px;line-height:1.85;color:var(--body);
+    box-shadow:inset 0 2px 0 var(--teal-soft);}
+  #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст перед копіюванням.";
     color:var(--faint);}
-  #doc h2{font-size:21px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 24px;}
+  #doc h2{font-size:20px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 20px;}
   #doc h3{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dark);font-weight:700;
-    border-bottom:1px solid var(--ink);padding-bottom:6px;margin:26px 0 11px;}
+    border-bottom:1px solid var(--ink);padding-bottom:6px;margin:24px 0 10px;}
   #doc p{margin:7px 0;}
-  #doc table{border-collapse:collapse;width:100%;margin:8px 0 18px;}
-  #doc th,#doc td{border:1px solid var(--line);padding:7px 11px;vertical-align:top;}
+  #doc table{border-collapse:collapse;width:100%;margin:8px 0 16px;}
+  #doc th,#doc td{border:1px solid var(--line);padding:6px 10px;vertical-align:top;}
   .flag{background:var(--amber-soft);color:var(--amber);font-weight:700;padding:0 5px;scroll-margin:90px;}
   .flag.active{outline:2px solid var(--amber);outline-offset:1px;background:#F6E3B6;}
   .status{padding:14px 20px;font-size:13px;color:var(--muted);min-height:44px;
