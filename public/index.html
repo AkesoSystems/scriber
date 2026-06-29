@@ -196,7 +196,7 @@
 <body>
 <header>
   <span class="brand"><span class="mark"></span><h1>Scriber</h1><span class="byline">AkesoSystems</span></span>
-  <select id="tmplSel" class="tmpl-sel" hidden title="Шаблон протоколу (тестовий акаунт)" aria-label="Шаблон протоколу"></select>
+  <select id="tmplSel" class="tmpl-sel" hidden title="Шаблон протоколу" aria-label="Шаблон протоколу"></select>
   <span class="trial" id="trial" hidden></span>
   <button class="logout" id="logoutBtn" type="button" hidden>Вийти</button>
 </header>
@@ -603,18 +603,25 @@
       if (!r.ok) return;
       const d = await r.json();
       renderTrial(d);
-      // Нейтральний QA-акаунт: показати випадайку шаблонів (заповнюємо один раз).
-      if (d.isNeutral && Array.isArray(d.templates) && d.templates.length){
+      // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
+      // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
+      // лікарю мітка зайва (це його ж ім'я), показуємо лише назву шаблону.
+      if (d.canPick && Array.isArray(d.templates) && d.templates.length){
         if (!tmplSel.dataset.filled){
           tmplSel.innerHTML = d.templates.map(t => {
-            const who = (t.testers && t.testers.length) ? t.testers.join(", ") : "не призначено";
-            return '<option value="' + t.key + '">' + t.label + ' — ' + who + '</option>';
+            if (d.isNeutral){
+              const who = (t.testers && t.testers.length) ? t.testers.join(", ") : "не призначено";
+              return '<option value="' + t.key + '">' + t.label + ' — ' + who + '</option>';
+            }
+            return '<option value="' + t.key + '">' + t.label + '</option>';
           }).join("");
+          if (d.primary) tmplSel.value = d.primary;   // пре-вибір первинного шаблону лікаря
           tmplSel.dataset.filled = "1";
         }
         tmplSel.hidden = false;
-        pasteWrap.hidden = false;   // тестовому акаунту — поле «встав текст → згенерувати»
       }
+      // QA-поле «встав текст → згенерувати» — ЛИШЕ нейтральному акаунту, не реальним лікарям.
+      if (d.isNeutral) pasteWrap.hidden = false;
       if (d.expired) lockForTrial();
     }catch(_){ /* без лічильника — не критично */ }
   }
