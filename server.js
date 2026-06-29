@@ -92,6 +92,20 @@ function getAuthUser(req) {
   } catch (_) { return "невідомо"; }
 }
 
+// Людський нік за логіном Basic Auth — щоб у дашборді/аналітиці було видно, ХТО конкретно
+// заходив, а не сухий "test2". Лише для відображення; PHI-firewall не зачіпає (нік — не PHI).
+// Зміна списку = git push + редеплой. Логін без запису → показуємо сам логін.
+const NICKNAMES_BY_USER = {
+  test:       "Юрій Юрійович",
+  test2:      "Головатий Василь",
+  test3:      "Даниїл Шипов",
+  test4:      "Андрій Дутчак",
+  test5:      "Ілля Андрійович (вет)",
+  test6:      "Ольга Дебель",
+  demo:       "ЛАБ (тест)",
+};
+function nickOf(user) { return NICKNAMES_BY_USER[user] || user; }
+
 // meta — необов'язковий об'єкт; беремо ЛИШЕ whitelisted ключі (див. PHI-firewall вище).
 function logEvent(uid, event, value, user, meta) {
   const row = {
@@ -186,7 +200,10 @@ function trialState(user, rows) {
 // Кожен акаунт бачить ЛИШЕ свій період (за власним Basic Auth-логіном) — ADMIN_KEY не потрібен.
 app.get("/api/trial", (req, res) => {
   const user = getAuthUser(req);
-  res.json(Object.assign({ user }, trialState(user)));
+  // Нейтральним QA-акаунтам віддаємо список шаблонів — клієнт показує випадайку вибору.
+  const isNeutral = NEUTRAL_USERS.has(user);
+  const templates = isNeutral ? Object.entries(TEMPLATES).map(([key, t]) => ({ key, label: t.label })) : null;
+  res.json(Object.assign({ user, isNeutral, templates }, trialState(user)));
 });
 
 // ── Адмін-керування періодом (за ADMIN_KEY): продовжити (+дні) / скинути ──
@@ -232,6 +249,23 @@ app.get("/api/stats", (req, res) => {
   // Фільтр по конкретному користувачу: /api/stats?key=...&user=test
   const filterUser = req.query.user;
   if (filterUser) rows = rows.filter((r) => (r.user || "—") === filterUser);
+
+  // Сирий per-recording список — ЛИШЕ коли фільтруємо по юзеру (інакше payload росте).
+  // Дає «кожен запис який записував лікар і скільки» без агрегації/середніх. PHI-safe:
+  // тільки час + число тривалості/ms + enum-код помилки. Жодного тексту диктовки/протоколу.
+  const RECORDINGS_CAP = 2000;
+  let recordings = null;
+  if (filterUser) {
+    recordings = [];
+    for (const r of rows) {
+      if (r.event === "rec_stop") recordings.push({ t: r.t, kind: "rec", durationSec: r.value || 0 });
+      else if (r.event === "generate_ok") recordings.push({ t: r.t, kind: "proto", ms: typeof r.ms === "number" ? r.ms : null });
+      else if (r.event === "generate_err") recordings.push({ t: r.t, kind: "err", code: r.code || "unknown" });
+      else if (r.event === "rating" && r.value >= 1 && r.value <= 5) recordings.push({ t: r.t, kind: "rating", value: r.value });
+    }
+    recordings.sort((a, b) => b.t - a.t); // новіші зверху
+    if (recordings.length > RECORDINGS_CAP) recordings = recordings.slice(0, RECORDINGS_CAP);
+  }
 
   const uniq = new Set();
   const days = {};
@@ -300,7 +334,7 @@ app.get("/api/stats", (req, res) => {
 
   // Engagement per-user (із byUserDay) — «кому написати»
   const today = dayKey(Date.now());
-  const engagement = Object.keys(byUserDay).map((user) => {
+  const engagement = Object.keys(byUserDay).filter((user) => !NEUTRAL_USERS.has(user)).map((user) => {
     const dmap = byUserDay[user];
     const activeDays = Object.keys(dmap).filter((d) => dmap[d].protocols > 0).sort();
     const lastActiveDay = activeDays.length ? activeDays[activeDays.length - 1] : null;
@@ -344,6 +378,7 @@ app.get("/api/stats", (req, res) => {
 
   res.json({
     users: allUsers,
+    nicks: Object.fromEntries(allUsers.map((u) => [u, nickOf(u)])),
     filteredBy: filterUser || null,
     uniqueDevices: uniq.size,
     visits: sum.visits,
@@ -363,6 +398,7 @@ app.get("/api/stats", (req, res) => {
     byUser: users,
     byDay: days,
     byUserDay,
+    recordingsLog: recordings, // сирий per-recording список (лише при ?user=), інакше null
     engagement,
     errors: {
       byCode: errBy.code, byProvider: errBy.provider, byStage: errBy.stage,
@@ -871,12 +907,34 @@ const SYSTEM_PROMPT_TESTER6 = `Ти — медичний редактор, що 
 // test6 (Ольга Дебель) — УЗД ОЧП у форматі Ольги;
 // для всіх інших (test, test4 і нові логіни) — стандартний SYSTEM_PROMPT.
 // SYSTEM_PROMPT_TESTER4 (щитоподібна) наразі не призначений жодному логіну — лишено на майбутнє.
-const PROMPTS_BY_USER = {
-  test2: SYSTEM_PROMPT_TESTER2, // черево + щитоподібна + дефолт
-  test3: SYSTEM_PROMPT_TESTER3, // дитяча ехокардіографія
-  test5: SYSTEM_PROMPT_TESTER5, // ветеринарні протоколи ZOOLUX (УЗД ОЧП + ЕХО КГ)
-  test6: SYSTEM_PROMPT_TESTER6, // Ольга Дебель — УЗД органів черевної порожнини (формат Ольги)
+// ── Шаблони протоколів (іменований реєстр) ──
+// Кожен шаблон = людська назва + system-промпт. Реальні лікарі залочені на свій шаблон за
+// логіном (PROMPTS_BY_USER). Нейтральні QA-акаунти (NEUTRAL_USERS) обирають шаблон динамічно
+// при кожній генерації — щоб команда тестувала будь-який тип протоколу під одним акаунтом.
+const TEMPLATES = {
+  default:         { label: "Стандарт (черевна порожнина)", prompt: SYSTEM_PROMPT },
+  abdomen_thyroid: { label: "Черево + щитоподібна (мульти)", prompt: SYSTEM_PROMPT_TESTER2 },
+  peds_echo:       { label: "Дитяча ехокардіографія", prompt: SYSTEM_PROMPT_TESTER3 },
+  thyroid:         { label: "Щитоподібна залоза", prompt: SYSTEM_PROMPT_TESTER4 },
+  vet_zoolux:      { label: "Ветеринарний (ZOOLUX)", prompt: SYSTEM_PROMPT_TESTER5 },
+  olga_abdomen:    { label: "УЗД ОЧП (формат Ольги)", prompt: SYSTEM_PROMPT_TESTER6 },
 };
+// Логін Basic Auth → ключ шаблону. Логіни поза мапою → "default".
+const PROMPTS_BY_USER = {
+  test2: "abdomen_thyroid", // черево + щитоподібна + дефолт
+  test3: "peds_echo",       // дитяча ехокардіографія
+  test5: "vet_zoolux",      // ветеринарні протоколи ZOOLUX (УЗД ОЧП + ЕХО КГ)
+  test6: "olga_abdomen",    // Ольга Дебель — УЗД ОЧП (формат Ольги)
+};
+// Нейтральні тестові акаунти, яким дозволено перемикати шаблон на льоту (з UI).
+const NEUTRAL_USERS = new Set(["demo"]);
+
+// Обрати system-промпт: нейтральний акаунт honor-ить запитаний шаблон; решта — залочені за логіном.
+function promptFor(user, requestedTemplate) {
+  if (NEUTRAL_USERS.has(user) && TEMPLATES[requestedTemplate]) return TEMPLATES[requestedTemplate].prompt;
+  const key = PROMPTS_BY_USER[user];
+  return (key && TEMPLATES[key] && TEMPLATES[key].prompt) || SYSTEM_PROMPT;
+}
 
 // ───────────────────────── Транскрипція (Whisper через Groq) ─────────────────────────
 // Приймає аудіо (multipart, поле "audio") від будь-якого клієнта — веб, PWA, майбутній
@@ -1068,7 +1126,7 @@ app.post("/api/protocol", async (req, res) => {
     });
   }
 
-  const systemPrompt = PROMPTS_BY_USER[user] || SYSTEM_PROMPT;
+  const systemPrompt = promptFor(user, req.body && req.body.template);
 
   // Ланцюг провайдерів: основний → резерв. Кожен збій логуємо з кодом; успіх після збою — fallback:true.
   const chain = [];

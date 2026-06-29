@@ -95,6 +95,10 @@
   .btn-rec.recording{background:var(--danger);}
   .btn-ghost{background:transparent;color:var(--ink);border-color:var(--line);}
   .btn-ghost:hover{background:#6B7780;color:#fff;border-color:#6B7780;}
+  /* Випадайка шаблону — лише для нейтрального QA-акаунта (інакше hidden) */
+  .tmpl-sel{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:0;padding:11px 14px;cursor:pointer;}
+  .tmpl-sel:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
   .btn-main{background:var(--ink);color:#fff;}
   .btn-main:hover{background:var(--teal-dark);}
   .btn-main:disabled{background:#CBD3D8;color:#fff;cursor:default;}
@@ -202,6 +206,7 @@
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
+      <select id="tmplSel" class="tmpl-sel" hidden title="Шаблон протоколу (тестовий акаунт)" aria-label="Шаблон протоколу"></select>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
       <span class="level" id="level" aria-hidden="true"><i id="levelBar"></i></span>
@@ -256,6 +261,7 @@
   const screen = document.getElementById("screen");
   const recBtn = document.getElementById("recBtn");
   const clearBtn = document.getElementById("clearBtn");
+  const tmplSel = document.getElementById("tmplSel");
   const genBtn = document.getElementById("genBtn");
   const doc = document.getElementById("doc");
   const statusEl = document.getElementById("status");
@@ -525,7 +531,7 @@
       const r = await fetch("/api/protocol", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text: finalText, uid })
+        body: JSON.stringify({ text: finalText, uid, template: tmplSel.hidden ? undefined : tmplSel.value })
       });
       gotResponse = true;
       const data = await r.json();
@@ -582,6 +588,15 @@
       if (!r.ok) return;
       const d = await r.json();
       renderTrial(d);
+      // Нейтральний QA-акаунт: показати випадайку шаблонів (заповнюємо один раз).
+      if (d.isNeutral && Array.isArray(d.templates) && d.templates.length){
+        if (!tmplSel.dataset.filled){
+          tmplSel.innerHTML = d.templates.map(t =>
+            '<option value="' + t.key + '">' + t.label + '</option>').join("");
+          tmplSel.dataset.filled = "1";
+        }
+        tmplSel.hidden = false;
+      }
       if (d.expired) lockForTrial();
     }catch(_){ /* без лічильника — не критично */ }
   }

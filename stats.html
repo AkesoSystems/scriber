@@ -132,7 +132,7 @@
 
   <h2 id="usersTitle">По користувачах <span style="text-transform:none;font-weight:400">(клік по рядку — фільтр на цього лікаря)</span></h2>
   <table id="usersTable">
-    <thead><tr><th>Логін</th><th>Візити</th><th>Записи</th><th>Серед. запис</th><th>Протоколи</th><th>Помилки</th><th>Експорти</th><th>Оцінка</th></tr></thead>
+    <thead><tr><th>Лікар</th><th>Візити</th><th>Записи</th><th>Серед. запис</th><th>Протоколи</th><th>Помилки</th><th>Експорти</th><th>Оцінка</th></tr></thead>
     <tbody id="usersBody"></tbody>
   </table>
 
@@ -142,6 +142,26 @@
     <thead><tr><th>Дата</th><th>Візити</th><th>Записи</th><th>Протоколи</th><th>Експорти</th></tr></thead>
     <tbody id="daysBody"></tbody>
   </table>
+
+  <!-- Per-user drilldown — показується лише коли обрано конкретного лікаря -->
+  <div id="userDaySection" style="display:none">
+    <h2>Динаміка по днях — <span id="userDayWho"></span></h2>
+    <p class="hint">Активність саме цього лікаря по календарних днях (Київський час).</p>
+    <table>
+      <thead><tr><th>Дата</th><th>Візити</th><th>Записи</th><th>Протоколи</th><th>Помилки</th><th>Експорти</th></tr></thead>
+      <tbody id="userDayBody"></tbody>
+    </table>
+  </div>
+
+  <div id="recLogSection" style="display:none">
+    <h2>Кожен запис — <span id="recLogWho"></span></h2>
+    <p class="hint">Кожна окрема дія цього лікаря (без середніх): кожен запис диктовки з його тривалістю,
+      кожен сформований протокол, помилки й оцінки. Новіші — зверху. <span id="recLogCount"></span></p>
+    <table>
+      <thead><tr><th>Час (Київ)</th><th>Подія</th><th>Деталь</th></tr></thead>
+      <tbody id="recLogBody"></tbody>
+    </table>
+  </div>
 </div>
 <script>
 const KEY = new URLSearchParams(location.search).get("key") || "";
@@ -164,6 +184,22 @@ function fmtSec(s){
   if (!s) return "0 с";
   return s >= 60 ? Math.floor(s/60) + " хв " + (s%60) + " с" : s + " с";
 }
+
+// Дата+час події у Київському часі (для per-recording журналу).
+function fmtDateTime(t){
+  return new Date(t).toLocaleString("uk-UA", {
+    timeZone:"Europe/Kyiv", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit",
+  });
+}
+// Людський нік за логіном (з d.nicks); фолбек — сам логін.
+function nickFor(login){ return (lastData && lastData.nicks && lastData.nicks[login]) || login; }
+// «Нік — логін» для таблиць (нік жирним). Якщо нік == логін, показуємо лише логін.
+function whoLabel(login){
+  const n = nickFor(login);
+  return n === login ? "<b>" + esc(login) + "</b>"
+                     : "<b>" + esc(n) + "</b> <span style='color:var(--muted)'>" + esc(login) + "</span>";
+}
+const REC_KIND_LABELS = { rec:"Запис диктовки", proto:"Протокол", err:"Помилка генерації", rating:"Оцінка" };
 
 function esc(s){ return String(s).replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c])); }
 
@@ -262,7 +298,8 @@ function load(user){
     if (!usersLoaded){
       d.users.forEach(u => {
         const o = document.createElement("option");
-        o.value = u; o.textContent = u;
+        const nk = (d.nicks && d.nicks[u]) || u;
+        o.value = u; o.textContent = nk === u ? u : (nk + " (" + u + ")");
         sel.appendChild(o);
       });
       usersLoaded = true;
@@ -311,7 +348,7 @@ function load(user){
       ? names.map(name => { const u = d.byUser[name];
           const avgRec = u.recordings ? fmtSec(Math.round(u.recSec / u.recordings)) : "—";
           const rate = u.ratingCount ? "★ " + (Math.round(u.ratingTotal / u.ratingCount * 10) / 10) : "—";
-          return '<tr class="clickable" data-user="' + name + '"><td><b>' + name + "</b></td><td>" + u.visits +
+          return '<tr class="clickable" data-user="' + name + '"><td>' + whoLabel(name) + "</td><td>" + u.visits +
                  "</td><td>" + u.recordings + "</td><td>" + avgRec + "</td><td>" + u.protocols +
                  "</td><td>" + u.errors + "</td><td>" + u.exports + "</td><td>" + rate + "</td></tr>"; }).join("")
       : '<tr><td colspan="8" style="color:#9AA7AE">Даних ще немає.</td></tr>';
@@ -339,12 +376,47 @@ function load(user){
                  + (e.trialBonusDays ? ' (+' + e.trialBonusDays + ')' : '') + '</span>';
           const ctrl = '<button class="t-btn" onclick="trialAct(\'' + u + '\',\'extend\')" title="Додати довільну кількість днів">+ дні…</button>'
                  + '<button class="t-btn t-reset" onclick="trialAct(\'' + u + '\',\'reset\')">Скинути</button>';
-          return '<tr class="' + cls + '"><td><b>' + u + "</b></td><td>" + last +
+          return '<tr class="' + cls + '"><td>' + whoLabel(e.user) + "</td><td>" + last +
                  "</td><td>" + dsa + "</td><td>" + e.protocols7d + "</td><td>" + e.protocols30d +
                  "</td><td>" + e.activeDaysStreak + "</td><td>" + rate + "</td><td>" + e.errorRate + "%</td>" +
                  "<td>" + trial + "</td><td>" + ctrl + "</td></tr>";
         }).join("")
       : '<tr><td colspan="10" style="color:#9AA7AE">Даних ще немає.</td></tr>';
+
+    // Per-user drilldown: динаміка по днях + журнал кожного запису саме цього лікаря.
+    // Показуємо лише коли обрано конкретного користувача (інакше дані не приходять / завеликі).
+    const udSec = document.getElementById("userDaySection");
+    const recSec = document.getElementById("recLogSection");
+    if (d.filteredBy){
+      const udMap = (d.byUserDay && d.byUserDay[d.filteredBy]) || {};
+      const udDays = Object.keys(udMap).sort().reverse();
+      document.getElementById("userDayWho").innerHTML = whoLabel(d.filteredBy);
+      document.getElementById("userDayBody").innerHTML = udDays.length
+        ? udDays.map(k => { const v = udMap[k];
+            return "<tr><td>" + k + "</td><td>" + v.visits + "</td><td>" + v.recordings +
+                   "</td><td>" + v.protocols + "</td><td>" + v.errors + "</td><td>" + v.exports + "</td></tr>"; }).join("")
+        : '<tr><td colspan="6" style="color:#9AA7AE">Даних ще немає.</td></tr>';
+      udSec.style.display = "";
+
+      const log = d.recordingsLog || [];
+      document.getElementById("recLogWho").innerHTML = whoLabel(d.filteredBy);
+      document.getElementById("recLogCount").textContent = log.length ? ("Усього подій: " + log.length + ".") : "";
+      document.getElementById("recLogBody").innerHTML = log.length
+        ? log.map(r => {
+            let detail;
+            if (r.kind === "rec") detail = fmtSec(r.durationSec);
+            else if (r.kind === "proto") detail = r.ms != null ? ("генерація " + fmtSec(Math.round(r.ms / 1000))) : "—";
+            else if (r.kind === "err") detail = '<span class="err">' + esc(CODE_LABELS[r.code] || r.code) + '</span>';
+            else if (r.kind === "rating") detail = "★ " + r.value;
+            else detail = "—";
+            return "<tr><td>" + fmtDateTime(r.t) + "</td><td>" + esc(REC_KIND_LABELS[r.kind] || r.kind) + "</td><td>" + detail + "</td></tr>";
+          }).join("")
+        : '<tr><td colspan="3" style="color:#9AA7AE">Записів ще немає.</td></tr>';
+      recSec.style.display = "";
+    } else {
+      udSec.style.display = "none";
+      recSec.style.display = "none";
+    }
 
     // Помилки: заголовок + три розбивки міні-барами
     const errs = d.errors || { byCode:{}, byProvider:{}, byStage:{}, total:0, errorRate:0 };
