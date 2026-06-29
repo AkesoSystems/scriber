@@ -95,10 +95,11 @@
   .btn-rec.recording{background:var(--danger);}
   .btn-ghost{background:transparent;color:var(--ink);border-color:var(--line);}
   .btn-ghost:hover{background:#6B7780;color:#fff;border-color:#6B7780;}
-  /* Випадайка шаблону — лише для нейтрального QA-акаунта (інакше hidden) */
-  .tmpl-sel{font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:0;padding:11px 14px;cursor:pointer;}
+  /* Випадайка шаблону у хедері — лише для нейтрального QA-акаунта (інакше hidden) */
+  .tmpl-sel{font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--ink);background:#fff;
+    border:1px solid var(--line);border-radius:0;padding:7px 12px;cursor:pointer;max-width:360px;}
   .tmpl-sel:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  @media(max-width:560px){.tmpl-sel{max-width:200px;font-size:11px;padding:6px 9px;}}
   .btn-main{background:var(--ink);color:#fff;}
   .btn-main:hover{background:var(--teal-dark);}
   .btn-main:disabled{background:#CBD3D8;color:#fff;cursor:default;}
@@ -195,6 +196,7 @@
 <body>
 <header>
   <span class="brand"><span class="mark"></span><h1>Scriber</h1><span class="byline">AkesoSystems</span></span>
+  <select id="tmplSel" class="tmpl-sel" hidden title="Шаблон протоколу (тестовий акаунт)" aria-label="Шаблон протоколу"></select>
   <span class="trial" id="trial" hidden></span>
   <button class="logout" id="logoutBtn" type="button" hidden>Вийти</button>
 </header>
@@ -206,7 +208,6 @@
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
-      <select id="tmplSel" class="tmpl-sel" hidden title="Шаблон протоколу (тестовий акаунт)" aria-label="Шаблон протоколу"></select>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
       <span class="level" id="level" aria-hidden="true"><i id="levelBar"></i></span>
@@ -591,8 +592,10 @@
       // Нейтральний QA-акаунт: показати випадайку шаблонів (заповнюємо один раз).
       if (d.isNeutral && Array.isArray(d.templates) && d.templates.length){
         if (!tmplSel.dataset.filled){
-          tmplSel.innerHTML = d.templates.map(t =>
-            '<option value="' + t.key + '">' + t.label + '</option>').join("");
+          tmplSel.innerHTML = d.templates.map(t => {
+            const who = (t.testers && t.testers.length) ? t.testers.join(", ") : "не призначено";
+            return '<option value="' + t.key + '">' + t.label + ' — ' + who + '</option>';
+          }).join("");
           tmplSel.dataset.filled = "1";
         }
         tmplSel.hidden = false;

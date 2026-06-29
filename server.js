@@ -202,7 +202,9 @@ app.get("/api/trial", (req, res) => {
   const user = getAuthUser(req);
   // Нейтральним QA-акаунтам віддаємо список шаблонів — клієнт показує випадайку вибору.
   const isNeutral = NEUTRAL_USERS.has(user);
-  const templates = isNeutral ? Object.entries(TEMPLATES).map(([key, t]) => ({ key, label: t.label })) : null;
+  const templates = isNeutral
+    ? Object.entries(TEMPLATES).map(([key, t]) => ({ key, label: t.label, testers: testersForTemplate(key) }))
+    : null;
   res.json(Object.assign({ user, isNeutral, templates }, trialState(user)));
 });
 
@@ -934,6 +936,14 @@ function promptFor(user, requestedTemplate) {
   if (NEUTRAL_USERS.has(user) && TEMPLATES[requestedTemplate]) return TEMPLATES[requestedTemplate].prompt;
   const key = PROMPTS_BY_USER[user];
   return (key && TEMPLATES[key] && TEMPLATES[key].prompt) || SYSTEM_PROMPT;
+}
+
+// Які тестери сидять на цьому шаблоні (нік(и)) — для випадайки demo, щоб видно було
+// «цей шаблон = протокол такого-то лікаря». Реверс PROMPTS_BY_USER (логіни поза мапою → default).
+function testersForTemplate(key) {
+  return Object.keys(NICKNAMES_BY_USER)
+    .filter((u) => !NEUTRAL_USERS.has(u) && (PROMPTS_BY_USER[u] || "default") === key)
+    .map(nickOf);
 }
 
 // ───────────────────────── Транскрипція (Whisper через Groq) ─────────────────────────
