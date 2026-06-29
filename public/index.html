@@ -197,6 +197,10 @@
     #doc{padding:24px 18px;min-height:300px;}
     .modal .star{font-size:38px;padding:5px 7px;}
   }
+  /* банер чернетки: видимість лише через [hidden] — інакше інлайн display:flex (author-origin)
+     перебиває UA-правило [hidden]{display:none} і банер не ховається */
+  #draftBar{display:none}
+  #draftBar:not([hidden]){display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -207,7 +211,7 @@
   <button class="logout" id="logoutBtn" type="button" hidden>Вийти</button>
 </header>
 
-<div id="draftBar" hidden role="alert" style="max-width:1360px;margin:14px auto 0;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--amber-soft);border:1px solid var(--amber-line);color:var(--amber);font-size:13px">
+<div id="draftBar" hidden role="alert" style="max-width:1360px;margin:14px auto 0;padding:10px 16px;background:var(--amber-soft);border:1px solid var(--amber-line);color:var(--amber);font-size:13px">
   <span>Знайдено незбережену чернетку від <strong id="draftTime"></strong> — відновити її?</span>
   <button id="draftRestore" class="btn-ghost" style="padding:7px 14px">Відновити</button>
   <button id="draftDiscard" class="btn-ghost" style="padding:7px 14px">Відхилити</button>
@@ -312,8 +316,9 @@
 
   const SEG_MS = 8000;       // довжина сегмента (~8 с)
 
-  // ── Чернетка у sessionStorage: переживає F5 / відновлення вкладки, але очищається при
-  //    закритті вкладки → НЕ лишає клінічний текст наступному лікарю на спільному компі.
+  // ── Чернетка у sessionStorage: переживає F5 / відновлення вкладки; здебільшого очищається при
+  //    закритті вкладки (виняток — відновлення після краху браузера, тоді рятує явний банер + TTL)
+  //    → НЕ лишає клінічний текст наступному лікарю на спільному компі.
   //    НЕтихо: при відкритті питаємо явно; чистимо при копіюванні / Word / PDF / «Очистити». ──
   const DRAFT_KEY = "uzd_draft";
   const DRAFT_TTL_MS = 2 * 60 * 60 * 1000;   // 2 год — старіші чернетки не пропонуємо
@@ -345,6 +350,7 @@
     const bar = document.getElementById("draftBar");
     bar.hidden = false;
     document.getElementById("draftRestore").onclick = () => {
+      if (recording) return;   // не затирати live-стан під час активного запису
       if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
       if (d.protocol){ doc.innerHTML = d.protocol; showFlagNav(); }
       bar.hidden = true;
@@ -579,7 +585,8 @@
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
 
   clearBtn.addEventListener("click", () => {
-    finalText = ""; liveText = ""; droppedSegs = 0; if (!recording) timerEl.textContent = ""; render(""); wipeDraft();
+    finalText = ""; liveText = ""; droppedSegs = 0; if (!recording) timerEl.textContent = "";
+    doc.innerHTML = ""; showFlagNav(); render(""); wipeDraft();   // чистимо й протокол → новий пацієнт не успадкує старий
   });
 
   genBtn.addEventListener("click", async () => {
@@ -702,6 +709,7 @@
         cache: "no-store",
       });
     }catch(_){}
+    wipeDraft();   // чистимо чернетку ПЕРЕД релоудом — у тій же вкладці наступний лікар її не побачить
     alert("Сеанс завершено. Якщо вікно входу не зʼявилося — закрийте вкладку або браузер, щоб вийти повністю.");
     location.reload();
   });
