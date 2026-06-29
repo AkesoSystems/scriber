@@ -144,6 +144,30 @@ app.post("/api/track", (req, res) => {
   res.json({ ok: true });
 });
 
+// Видалити ВСЮ аналітику конкретного логіна (очистка тест-акаунту / запит на видалення даних).
+// Захищено тим самим ADMIN_KEY, що й /api/stats. Переписує analytics.jsonl, лишаючи рядки
+// інших користувачів байт-у-байт; незпарсені рядки зберігаються. POST /api/admin/purge-user?key=...&user=test7
+app.post("/api/admin/purge-user", (req, res) => {
+  if (!ADMIN_KEY_OK) return res.status(503).json({ ok: false, error: "ADMIN_KEY не налаштований" });
+  if (String(req.query.key || "") !== ADMIN_KEY) return res.status(403).json({ ok: false, error: "forbidden" });
+  const target = String(req.query.user || "").slice(0, 40);
+  if (!target) return res.status(400).json({ ok: false, error: "параметр user обов'язковий" });
+  let lines;
+  try { lines = fs.readFileSync(ANALYTICS_FILE, "utf8").split("\n"); }
+  catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  let removed = 0;
+  const kept = lines.filter((l) => {
+    if (!l) return false;
+    let r; try { r = JSON.parse(l); } catch (_) { return true; } // незпарсений рядок — лишаємо
+    if (r && r.user === target) { removed++; return false; }
+    return true;
+  });
+  try { fs.writeFileSync(ANALYTICS_FILE, kept.length ? kept.join("\n") + "\n" : ""); }
+  catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  console.log("[analytics] purge-user " + target + ": видалено " + removed + " рядків, лишилось " + kept.length);
+  res.json({ ok: true, user: target, removed, remaining: kept.length });
+});
+
 // Ключ дня YYYY-MM-DD у Europe/Kyiv (стабільний для byDay/byUserDay/today).
 function dayKey(t) {
   return new Intl.DateTimeFormat("en-CA", {
