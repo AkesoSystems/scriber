@@ -134,8 +134,12 @@ function logEvent(uid, event, value, user, meta) {
 app.post("/api/track", (req, res) => {
   const { uid, event, value, provider, model, code, stage, ms, fallback } = req.body || {};
   if (!ALLOWED_EVENTS.has(event)) return res.status(400).json({ ok: false });
+  const user = getAuthUser(req);
+  // Не логуємо події без логіна basic-auth (healthcheck / service worker / боти) — це фоновий
+  // шум «невідомо», не реальний лікар. Тихо підтверджуємо, щоб клієнт не отримав помилку.
+  if (user === "невідомо") return res.json({ ok: true });
   // logEvent пересанітизує meta через whitelist — ворожий клієнт текст не вкине.
-  logEvent(uid, event, value, getAuthUser(req), { provider, model, code, stage, ms, fallback });
+  logEvent(uid, event, value, user, { provider, model, code, stage, ms, fallback });
   res.json({ ok: true });
 });
 
