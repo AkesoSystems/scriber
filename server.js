@@ -1172,6 +1172,11 @@ const TEMPLATE_CHOICES_BY_USER = {
 // Нейтральні тестові акаунти, яким дозволено перемикати БУДЬ-ЯКИЙ шаблон на льоту (з UI).
 const NEUTRAL_USERS = new Set(["demo"]);
 
+// Генерація протоколу З ТЕКСТУ (прев'ю /api/autofill + чистовик /api/protocol) дозволена ЛИШЕ
+// нейтральним QA-акаунтам (demo). Реальні логіни — заблоковані (серверна перевірка, з клієнта не
+// обійти). Транскрипція аудіо й порожній бланк (/api/skeleton) лишаються доступними всім.
+function mayGenerate(user) { return NEUTRAL_USERS.has(user); }
+
 // Чи дозволено цьому юзеру запросити саме цей шаблон (нейтральний — будь-який; решта — лише свій набір).
 function mayUseTemplate(user, key) {
   const exists = Object.hasOwn(TEMPLATES, key); // не довіряй прото-ключам (__proto__/constructor)
@@ -1457,6 +1462,7 @@ app.post("/api/autofill", async (req, res) => {
   const raw = (req.body && req.body.text || "").trim();
   if (!raw) return res.status(400).json({ error: "empty" });
   const user = getAuthUser(req);
+  if (!mayGenerate(user)) return res.status(403).json({ error: "gen_disabled" });
   if (trialState(user).expired) return res.status(403).json({ trialExpired: true });
   const systemPrompt = promptFor(user, req.body && req.body.template);
   try {
@@ -1475,6 +1481,15 @@ app.post("/api/protocol", async (req, res) => {
 
   const user = getAuthUser(req);
   const uid = (req.body && req.body.uid) || "server";
+
+  // Генерація з тексту тимчасово дозволена лише на demo (нейтральний QA). Реальні логіни — блок.
+  if (!mayGenerate(user)) {
+    logEvent(uid, "generate_err", null, user, { stage: "generate", code: "gen_disabled" });
+    return res.status(403).json({
+      error: "Генерація протоколу тимчасово доступна лише на демо-акаунті. Зверніться до команди AkesoSystems.",
+      genDisabled: true,
+    });
+  }
 
   // Тестовий період вичерпано → блокуємо генерацію (серверна перевірка, обійти з клієнта не можна).
   const trial = trialState(user);
