@@ -485,33 +485,48 @@
   // ── Живе заповнення шаблону ПІД ЧАС диктовки (чернетка) ──
   // Після кожного розпізнаного чанка з невеликою затримкою шлемо весь текст-досі у
   // /api/autofill (Nova) і малюємо заповнений шаблон у #doc. Чистовик — Sonnet на стопі.
-  let autofillTimer = null, autofillSeq = 0, autofillBusy = false;
+  let autofillTimer = null, autofillSeq = 0, autofillBusy = false, lastSkeletonTmpl = null;
   function dictationSoFar(){ return (finalText + (finalText && liveText ? " " : "") + liveText).trim(); }
+  function curTemplate(){ return tmplSel.hidden ? undefined : tmplSel.value; }
   function renderProtocolHtml(html){
     doc.innerHTML = String(html || "").replace(/\[\?\]/g, '<span class="flag">[?]</span>');
     showFlagNav();
   }
+  // Порожній бланк шаблону — щоб лікар ОДРАЗУ бачив форму ще до диктовки.
+  async function showSkeleton(force){
+    if (recording || dictationSoFar()) return;          // під час запису/з текстом форму веде autofill
+    const tmpl = curTemplate() || "";
+    if (!force && lastSkeletonTmpl === tmpl && doc.innerHTML.trim()) return;
+    try{
+      const r = await fetch("/api/skeleton" + (tmpl ? "?template=" + encodeURIComponent(tmpl) : ""), { cache:"no-store" });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data.html && !recording && !dictationSoFar()){ renderProtocolHtml(data.html); lastSkeletonTmpl = tmpl; }
+    }catch(_){}
+  }
   function scheduleAutofill(){
     if (trialExpired) return;
     clearTimeout(autofillTimer);
-    autofillTimer = setTimeout(runAutofill, 1500);     // debounce ~1.5 с після останнього чанка
+    autofillTimer = setTimeout(() => runAutofill(false), 1500);   // debounce ~1.5 с після чанка
   }
-  async function runAutofill(){
-    if (autofillBusy){ scheduleAutofill(); return; }   // зайнято — повторимо пізніше
+  // isFinal=true — фінальний прохід по ПОВНОМУ тексту на стопі (рендериться навіть коли запис уже зупинено).
+  async function runAutofill(isFinal){
+    if (autofillBusy){ if (isFinal) setTimeout(() => runAutofill(true), 400); else scheduleAutofill(); return; }
     const text = dictationSoFar();
-    if (!text || !recording) return;
+    if (!text) return;
+    if (!isFinal && !recording) return;                 // проміжні проходи — лише під час запису
     const seq = ++autofillSeq;
     autofillBusy = true;
     try{
       const r = await fetch("/api/autofill", {
         method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text, uid, template: tmplSel.hidden ? undefined : tmplSel.value })
+        body: JSON.stringify({ text, uid, template: curTemplate() })
       });
       const data = await r.json().catch(() => ({}));
-      // Малюємо лише найсвіжішу відповідь і лише поки триває запис (щоб не затерти фінал Sonnet).
-      if (r.ok && data.html && seq === autofillSeq && recording){
+      // Фінальний прохід рендеримо завжди; проміжний — лише якщо це найсвіжіший і ще йде запис.
+      if (r.ok && data.html && (isFinal || (seq === autofillSeq && recording))){
         renderProtocolHtml(data.html);
-        setStatus("Заповнюю протокол наживо… (чистовик — після «Сформувати протокол»)");
+        if (!isFinal) setStatus("Заповнюю протокол наживо…");
       }
     }catch(_){ /* прев'ю best-effort — мовчки ігноруємо */ }
     finally{ autofillBusy = false; }
@@ -553,12 +568,13 @@
   }
 
   function finalizeText(){
-    clearTimeout(autofillTimer); autofillSeq++;        // зупиняємо живе прев'ю
+    clearTimeout(autofillTimer);                       // зупиняємо проміжні проходи
     doc.contentEditable = "true";                      // після стопу протокол знову редагований
     if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (liveText.trim()) finalText += (finalText ? " " : "") + liveText.trim();
     liveText = "";
     render("");
+    if (finalText.trim()) runAutofill(true);           // ФІНАЛЬНИЙ прохід по повному тексту (рендериться після стопу)
     const transSec = recStopAt ? Math.max(0, Math.round((Date.now() - recStopAt) / 1000)) : 0;
     timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнавання " + transSec + "с";
     setStatus(droppedSegs
@@ -577,9 +593,10 @@
       return;
     }
     liveText = ""; droppedSegs = 0;
-    // Старт нового живого прев'ю: чистимо протокол і блокуємо ручне редагування на час запису
-    // (живе автозаповнення перезаписує #doc; правки — після стопу/«Сформувати»).
-    doc.innerHTML = ""; flagNav.classList.remove("show"); doc.contentEditable = "false"; autofillSeq++;
+    // На час запису блокуємо ручне редагування (форму веде автозаповнення; правки — після стопу).
+    // #doc не чистимо — лишаємо видимий бланк, autofill його дозаповнить, коли підуть чанки.
+    flagNav.classList.remove("show"); doc.contentEditable = "false";
+    if (!dictationSoFar()) showSkeleton(true);         // показати порожній бланк перед першим чанком
     startLevel(micStream);                             // живий рівень мікрофона
     startSegment();                                    // перший сегмент
     segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле + стартує наступний
@@ -726,10 +743,13 @@
           tmplSel.dataset.filled = "1";
         }
         tmplSel.hidden = false;
+        // зміна шаблону у пікері → одразу показати порожній бланк нового шаблону
+        if (!tmplSel.dataset.skelHooked){ tmplSel.addEventListener("change", () => showSkeleton(true)); tmplSel.dataset.skelHooked = "1"; }
       }
       // QA-поле «встав текст → згенерувати» — ЛИШЕ нейтральному акаунту, не реальним лікарям.
       if (d.isNeutral) pasteWrap.hidden = false;
       if (d.expired) lockForTrial();
+      else showSkeleton();                  // показати порожній бланк протоколу одразу при вході
     }catch(_){ /* без лічильника — не критично */ }
   }
   loadTrial();

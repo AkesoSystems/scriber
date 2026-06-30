@@ -1354,6 +1354,25 @@ function protocolViaCLI(systemPrompt, raw) {
   });
 }
 
+// Порожній БЛАНК шаблону — щоб лікар одразу бачив форму ще до диктовки.
+// Генеруємо раз через Nova (з форсуванням повної структури) і кешуємо в пам'яті.
+const skeletonCache = new Map();
+const SKELETON_RAW = "(діагностичний бланк: лікар ще нічого не продиктував)";
+const SKELETON_FORCE = "\n\n[РЕЖИМ ПОРОЖНЬОГО БЛАНКА] Лікар ще НІЧОГО не продиктував — це попередній бланк форми. Виведи ПОВНУ структуру цього протоколу: УСІ розділи, рядки, поля й таблиці шаблону. Кожне значення/число, яке зазвичай диктують, постав як [?]. НЕ пропускай жодного розділу (навіть якщо звичайні правила кажуть пропускати незгадане). Якісні дефолтні формулювання шаблону лишай як є. Нічого не вигадуй і не додавай поза шаблоном.";
+app.get("/api/skeleton", async (req, res) => {
+  if (!bedrock) return res.status(503).json({ error: "no_provider" });
+  const user = getAuthUser(req);
+  const t = req.query.template;
+  const cacheKey = (t && mayUseTemplate(user, t)) ? t : (PROMPTS_BY_USER[user] || "default");
+  const hit = skeletonCache.get(cacheKey);
+  if (hit) return res.json({ html: hit, cached: true });
+  try {
+    const html = await protocolViaBedrock(promptFor(user, t) + SKELETON_FORCE, SKELETON_RAW, BEDROCK_MODEL);
+    skeletonCache.set(cacheKey, html);
+    res.json({ html });
+  } catch (e) { res.status(502).json({ error: (e && e.code) || "unknown" }); }
+});
+
 // Живе прев'ю заповнення шаблону ПІД ЧАС диктовки. Швидка/дешева модель (Nova).
 // Best-effort: НЕ логуємо як generate_ok (щоб не накручувати лічильник протоколів),
 // без ланцюга-резерву — це лише чернетка, чистовик дає /api/protocol (Sonnet) на стопі.
