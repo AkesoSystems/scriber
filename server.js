@@ -9,6 +9,7 @@ const { BedrockRuntimeClient, ConverseCommand } = require("@aws-sdk/client-bedro
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 
 // Завантажуємо секрети з .env (якщо файл є) — без зовнішніх залежностей.
 // Файл .env у .gitignore і в репозиторій не потрапляє.
@@ -1157,8 +1158,15 @@ const PROMPTS_BY_USER = {
 };
 // Логін → НАБІР шаблонів, які лікар може перемикати ВРУЧНУ в UI (підмножина TEMPLATES).
 // Дає реальному лікарю випадайку вибору, не відкриваючи всі шаблони (на відміну від NEUTRAL_USERS).
+// КОЖЕН тестер має тут СВІЙ набір — бачить лише власні протоколи (own-only гарантує mayUseTemplate +
+// /api/trial). Пікер у UI зʼявляється, коли в наборі >1 ключа (canPick). Щоб дати лікарю вибір —
+// просто додай ще його ключ(і) сюди (+ за потреби визнач новий промпт у TEMPLATES). Один ключ = без
+// пікера, лише фіксований протокол (поведінка як раніше).
 const TEMPLATE_CHOICES_BY_USER = {
   test2: ["vasyl_abdomen", "vasyl_thyroid"],         // Головатий: черевна або щитоподібна на вибір
+  test3: ["peds_echo"],                              // Шипов: дитяча ехокардіографія (поки один формат)
+  test5: ["vet_zoolux"],                             // ZOOLUX (вет): один формат
+  test6: ["olga_abdomen"],                           // Ольга Дебель: УЗД ОЧП (один формат)
   test7: ["dolhushyna_thyroid", "dolhushyna_echo"],  // Долгушина: ЩЗ або ЕХОКГ на вибір
 };
 // Нейтральні тестові акаунти, яким дозволено перемикати БУДЬ-ЯКИЙ шаблон на льоту (з UI).
@@ -1366,22 +1374,79 @@ function protocolViaCLI(systemPrompt, raw) {
 }
 
 // Порожній БЛАНК шаблону — щоб лікар одразу бачив форму ще до диктовки.
-// Генеруємо раз через Nova (з форсуванням повної структури) і кешуємо в пам'яті.
+// ДЕТЕРМІНІЗМ: ключ кешу = ключ-шаблону + ХЕШ повного промпта бланка. Зміна промпта → новий хеш →
+// автоматично свіжий бланк (старий не «застряє»). Генерація фінальною моделлю (Sonnet) з відкатом на
+// Nova, щоб бланк ніколи не падав. Persist на той самий volume, що й analytics.jsonl → той самий
+// промпт дає той самий файл навіть після редеплою (нуль випадкових перегенерацій).
 const skeletonCache = new Map();
+const SKELETON_DIR = path.join(__dirname, "skeletons");
+try { fs.mkdirSync(SKELETON_DIR, { recursive: true }); } catch (_) { /* створиться при першому записі */ }
 const SKELETON_RAW = "(діагностичний бланк: лікар ще нічого не продиктував)";
 const SKELETON_FORCE = "\n\n[РЕЖИМ ПОРОЖНЬОГО БЛАНКА] Лікар ще НІЧОГО не продиктував — це попередній бланк форми. Виведи ПОВНУ структуру цього протоколу: УСІ розділи, рядки, поля й таблиці шаблону. Кожне значення/число, яке зазвичай диктують, постав як [?]. НЕ пропускай жодного розділу (навіть якщо звичайні правила кажуть пропускати незгадане). Якісні дефолтні формулювання шаблону лишай як є. Нічого не вигадуй і не додавай поза шаблоном.";
+
+// Ключ бланка: людський префікс (ключ-шаблону, для читабельності файлу) + хеш вмісту промпта.
+// Хеш робить версійний дрейф структурно неможливим — інший промпт = інший ключ = інший файл.
+function skeletonKeyFor(user, t) {
+  const tplKey = (t && mayUseTemplate(user, t)) ? t : (PROMPTS_BY_USER[user] || "default");
+  const promptText = promptFor(user, t) + SKELETON_FORCE;
+  const hash = crypto.createHash("sha256").update(promptText).digest("hex").slice(0, 16);
+  return { cacheKey: `${tplKey}.${hash}`, promptText };
+}
+
 app.get("/api/skeleton", async (req, res) => {
   if (!bedrock) return res.status(503).json({ error: "no_provider" });
   const user = getAuthUser(req);
   const t = req.query.template;
-  const cacheKey = (t && mayUseTemplate(user, t)) ? t : (PROMPTS_BY_USER[user] || "default");
-  const hit = skeletonCache.get(cacheKey);
-  if (hit) return res.json({ html: hit, cached: true });
+  const { cacheKey, promptText } = skeletonKeyFor(user, t);
+  // 1) гаряча пам'ять
+  const mem = skeletonCache.get(cacheKey);
+  if (mem) return res.json({ html: mem, cached: true });
+  // 2) диск (persist між редеплоями)
+  const file = path.join(SKELETON_DIR, cacheKey + ".html");
   try {
-    const html = await protocolViaBedrock(promptFor(user, t) + SKELETON_FORCE, SKELETON_RAW, BEDROCK_MODEL);
-    skeletonCache.set(cacheKey, html);
-    res.json({ html });
-  } catch (e) { res.status(502).json({ error: (e && e.code) || "unknown" }); }
+    const disk = fs.readFileSync(file, "utf8");
+    skeletonCache.set(cacheKey, disk);
+    return res.json({ html: disk, cached: true });
+  } catch (_) { /* немає на диску — генеруємо нижче */ }
+  // 3) генерація: Sonnet (якість) → відкат на Nova, щоб бланк ніколи не падав
+  let html;
+  try {
+    html = await protocolViaBedrock(promptText, SKELETON_RAW, BEDROCK_MODEL_FINAL);
+  } catch (_e1) {
+    try {
+      html = await protocolViaBedrock(promptText, SKELETON_RAW, BEDROCK_MODEL);
+    } catch (e2) {
+      return res.status(502).json({ error: (e2 && e2.code) || "unknown" });
+    }
+  }
+  skeletonCache.set(cacheKey, html);
+  try { fs.writeFileSync(file, html); } catch (_) { /* диск необов'язковий — пам'ять уже має значення */ }
+  res.json({ html });
+});
+
+// Примусовий скид кешу бланків (пам'ять + диск). Бланк і так оновлюється авто (ключ за хешем промпта),
+// але це дає миттєвий ручний скид — напр. перегенерувати після правки промпта без чекання, або для ревʼю.
+// Захищено тим самим ADMIN_KEY. POST /api/admin/regen-skeletons?key=...[&template=<ключ>]
+app.post("/api/admin/regen-skeletons", (req, res) => {
+  if (!ADMIN_KEY_OK) return res.status(503).json({ ok: false, error: "ADMIN_KEY не налаштований" });
+  if (String(req.query.key || "") !== ADMIN_KEY) return res.status(403).json({ ok: false, error: "forbidden" });
+  const tpl = String(req.query.template || "").slice(0, 60);
+  const prefix = tpl ? tpl + "." : null; // ключ файлу = "<шаблон>.<хеш>"
+  let clearedMem = 0;
+  for (const k of [...skeletonCache.keys()]) {
+    if (!prefix || k.startsWith(prefix)) { skeletonCache.delete(k); clearedMem++; }
+  }
+  let clearedDisk = 0;
+  try {
+    for (const f of fs.readdirSync(SKELETON_DIR)) {
+      if (!f.endsWith(".html")) continue;
+      if (!prefix || f.startsWith(prefix)) {
+        try { fs.unlinkSync(path.join(SKELETON_DIR, f)); clearedDisk++; } catch (_) {}
+      }
+    }
+  } catch (_) { /* диру могли ще не створити */ }
+  console.log(`[skeleton] regen ${tpl || "ALL"}: пам'ять ${clearedMem}, диск ${clearedDisk}`);
+  res.json({ ok: true, template: tpl || "ALL", clearedFromMemory: clearedMem, clearedFromDisk: clearedDisk });
 });
 
 // Живе прев'ю заповнення шаблону ПІД ЧАС диктовки. Швидка/дешева модель (Nova).

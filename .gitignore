@@ -1,5 +1,6 @@
 node_modules
 analytics.jsonl
+skeletons/
 *.log
 *.bak
 *.bak_*
