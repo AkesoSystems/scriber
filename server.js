@@ -1070,6 +1070,11 @@ const SYSTEM_PROMPT_TESTER5 = `Ти — медичний редактор, що 
 
 Нічого, крім обраного HTML-фрагмента, не виводь.`;
 
+// Примусові варіанти ZOOLUX — щоб лікар (test5) міг у пікері ВРУЧНУ обрати тип протоколу,
+// а не лише покладатись на авто-визначення з диктовки (як у Головатого: vasyl_abdomen/thyroid).
+const SYSTEM_PROMPT_VET_ZOOLUX_ABDOMEN = "ВАЖЛИВО: ЗАВЖДИ використовуй ШАБЛОН А «УЗД (експертне)» (органи черевної порожнини), незалежно від змісту диктовки. Не обирай ШАБЛОН Б і не формуй суцільний опис.\n\n" + SYSTEM_PROMPT_TESTER5;
+const SYSTEM_PROMPT_VET_ZOOLUX_ECHO = "ВАЖЛИВО: ЗАВЖДИ використовуй ШАБЛОН Б «ЕХО КГ (експертна)», незалежно від змісту диктовки. Не обирай ШАБЛОН А і не формуй суцільний опис.\n\n" + SYSTEM_PROMPT_TESTER5;
+
 // ───────────── Промпт для test6 (Ольга Дебель): УЗД органів черевної порожнини ─────────────
 // Суцільний опис із жирними назвами органів, у порядку: печінка/ворітна → жовчний міхур →
 // підшлункова → селезінка → нирки. Якісні формулювання — НОРМА-дефолт (модель замінює на
@@ -1497,8 +1502,10 @@ const TEMPLATES = {
   abdomen_thyroid: { label: "Черево + щитоподібна (мульти)", prompt: SYSTEM_PROMPT_TESTER2 },
   peds_echo:       { label: "Дитяча ехокардіографія", prompt: SYSTEM_PROMPT_TESTER3 },
   thyroid:         { label: "Щитоподібна залоза", prompt: SYSTEM_PROMPT_TESTER4 },
-  vet_zoolux:      { label: "Ветеринарний (ZOOLUX)", prompt: SYSTEM_PROMPT_TESTER5 },
-  levadna_abdomen: { label: "Вет ОЧП (собака, самець) — Левадна", prompt: SYSTEM_PROMPT_LEVADNA_ABDOMEN, blank: LEVADNA_ABDOMEN_BLANK },
+  vet_zoolux:         { label: "Ветеринарний (ZOOLUX)", prompt: SYSTEM_PROMPT_TESTER5 },
+  vet_zoolux_abdomen: { label: "Ветеринарний УЗД ОЧП (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ABDOMEN },
+  vet_zoolux_echo:    { label: "Ветеринарний ЕХО КГ (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ECHO },
+  levadna_abdomen:    { label: "Вет ОЧП (собака, самець) — Левадна", prompt: SYSTEM_PROMPT_LEVADNA_ABDOMEN, blank: LEVADNA_ABDOMEN_BLANK },
   olga_abdomen:    { label: "УЗД ОЧП (формат Ольги)", prompt: SYSTEM_PROMPT_TESTER6 },
   dolhushyna_thyroid: { label: "Щитоподібна залоза (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_THYROID, blank: DOLHUSHYNA_THYROID_BLANK },
   dolhushyna_echo:    { label: "ЕХОКГ (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_ECHO, blank: DOLHUSHYNA_ECHO_BLANK },
@@ -1511,7 +1518,7 @@ const TEMPLATES = {
 const PROMPTS_BY_USER = {
   test2: "vasyl_abdomen",   // Головатий Василь — дефолт черевна (може перемкнути на щитоподібну, див. нижче)
   test3: "peds_echo",       // дитяча ехокардіографія
-  test5: "vet_zoolux",      // ветеринарні протоколи ZOOLUX (УЗД ОЧП + ЕХО КГ)
+  test5: "vet_zoolux_abdomen", // дефолт — УЗД ОЧП; ЕХО КГ обирається в пікері
   ultrasound_camp: "levadna_abdomen",  // вет ОЧП собака-самець (Ірина Левадна)
   test6: "olga_abdomen",    // Ольга Дебель — УЗД ОЧП (формат Ольги)
   test7: "dolhushyna_thyroid", // Долгушина Альбіна — дефолт ЩЗ (може перемкнути на ЕХОКГ, див. нижче)
@@ -1526,7 +1533,7 @@ const PROMPTS_BY_USER = {
 const TEMPLATE_CHOICES_BY_USER = {
   test2: ["vasyl_abdomen", "vasyl_thyroid"],         // Головатий: черевна або щитоподібна на вибір
   test3: ["peds_echo"],                              // Шипов: дитяча ехокардіографія (поки один формат)
-  test5: ["vet_zoolux"],                             // ZOOLUX (вет): один формат
+  test5: ["vet_zoolux_abdomen", "vet_zoolux_echo"],  // ZOOLUX (вет): ОЧП або ЕХО КГ на вибір
   ultrasound_camp: ["levadna_abdomen"],              // Левадна (вет ОЧП): один формат
   test6: ["olga_abdomen"],                           // Ольга Дебель: УЗД ОЧП (один формат)
   test7: ["dolhushyna_thyroid", "dolhushyna_echo"],  // Долгушина: ЩЗ або ЕХОКГ на вибір
