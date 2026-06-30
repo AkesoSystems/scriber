@@ -103,7 +103,7 @@ const NICKNAMES_BY_USER = {
   test3:      "Даниїл Шипов",
   test4:      "Андрій Дутчак",
   test5:      "Ілля Андрійович (вет)",
-  ultrasound_camp: "Ірина Левадна",
+  test9: "Ірина Левадна",
   test6:      "Ольга Дебель",
   test7:      "Долгушина Альбіна",
   test8:      "Роксоляна Денисюк",
@@ -1731,7 +1731,7 @@ const PROMPTS_BY_USER = {
   test2: "vasyl_abdomen",   // Головатий Василь — дефолт черевна (може перемкнути на щитоподібну, див. нижче)
   test3: "peds_echo",       // дитяча ехокардіографія
   test5: "vet_zoolux_abdomen", // дефолт — УЗД ОЧП; ЕХО КГ обирається в пікері
-  ultrasound_camp: "levadna_abdomen",  // вет ОЧП собака-самець (Ірина Левадна)
+  test9: "levadna_abdomen",  // вет ОЧП собака-самець (Ірина Левадна)
   test6: "olga_abdomen",    // Ольга Дебель — УЗД ОЧП (формат Ольги)
   test7: "dolhushyna_thyroid", // Долгушина Альбіна — дефолт ЩЗ (може перемкнути на ЕХОКГ, див. нижче)
   test8: "denysiuk_venous",    // Денисюк Роксоляна — доплерографія вен нижніх кінцівок
@@ -1746,7 +1746,7 @@ const TEMPLATE_CHOICES_BY_USER = {
   test2: ["vasyl_abdomen", "vasyl_thyroid"],         // Головатий: черевна або щитоподібна на вибір
   test3: ["peds_echo"],                              // Шипов: дитяча ехокардіографія (поки один формат)
   test5: ["vet_zoolux_abdomen", "vet_zoolux_echo"],  // ZOOLUX (вет): ОЧП або ЕХО КГ на вибір
-  ultrasound_camp: ["levadna_abdomen"],              // Левадна (вет ОЧП): один формат
+  test9: ["levadna_abdomen"],              // Левадна (вет ОЧП): один формат
   test6: ["olga_abdomen"],                           // Ольга Дебель: УЗД ОЧП (один формат)
   test7: ["dolhushyna_thyroid", "dolhushyna_echo"],  // Долгушина: ЩЗ або ЕХОКГ на вибір
   test8: ["denysiuk_venous"],                        // Денисюк: доплерографія вен (один формат)
