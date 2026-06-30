@@ -78,15 +78,14 @@
     justify-content:space-between;gap:10px;}
 
   /* ── Поле диктовки: чорний «екран» з білим текстом ── */
-  .screen{position:relative;font-family:var(--mono);font-size:14px;line-height:1.8;color:#F2F4F4;
-    background:linear-gradient(180deg,#11151B 0%,#0A0C0F 100%);
-    min-height:320px;max-height:48vh;overflow-y:auto;padding:24px 26px;white-space:pre-wrap;
-    border-left:2px solid var(--teal);box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
-    scrollbar-width:thin;scrollbar-color:#2A323B transparent;}
-  .screen::-webkit-scrollbar{width:10px;}
-  .screen::-webkit-scrollbar-thumb{background:#262E37;border:3px solid #0A0C0F;}
-  .screen .interim{color:#7E8A92;}
-  .screen:empty::before{content:"Натисніть «Почати запис» і диктуйте протокол — текст зʼявлятиметься тут у реальному часі.";color:#69737A;}
+  /* ── Хвиля: бари, що рухаються від звуку (замість чорного вікна тексту) ── */
+  .wave{display:flex;align-items:center;justify-content:center;gap:4px;
+    min-height:150px;padding:26px 24px;background:linear-gradient(180deg,#F4F7FE 0%,#E9F0FD 100%);}
+  .wave-bar{width:5px;height:78px;border-radius:6px;
+    background:linear-gradient(180deg,#9DB2F4 0%,#6E84E8 100%);
+    transform:scaleY(.14);transform-origin:center;transition:transform .09s linear;opacity:.55;}
+  .wave.live .wave-bar{opacity:1;}
+  @media(prefers-reduced-motion:reduce){.wave-bar{transition:none}}
 
   .controls{padding:16px 18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
     border-top:1px solid var(--line);}
@@ -220,16 +219,15 @@
 <div class="wrap">
   <section class="panel">
     <div class="panel-h">Диктовка</div>
-    <div class="screen" id="screen"></div>
+    <div class="wave" id="wave" aria-hidden="true"></div>
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
-      <span class="level" id="level" aria-hidden="true"><i id="levelBar"></i></span>
     </div>
-    <div class="hint">Диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
-      Текст зʼявляється блоками під час диктовки. Сумнівні місця буде позначено <b>[?]</b> — перевірте їх перед збереженням.</div>
+    <div class="hint">Натисніть «Почати запис» і диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
+      Після зупинки система розпізнає весь запис і Claude заповнить протокол. Сумнівні місця — <b>[?]</b>, перевірте перед збереженням.</div>
     <div id="pasteWrap" hidden style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
       <textarea id="pasteBox" rows="4" placeholder="Тестовий акаунт: встав сюди текст диктовки (поганий або ідеальний) і натисни «Згенерувати з тексту»" style="width:100%;font:14px/1.45 inherit;padding:8px;border:1px solid #ccc;border-radius:8px;resize:vertical;box-sizing:border-box"></textarea>
       <button id="pasteGenBtn" class="btn-ghost" style="align-self:flex-start">Згенерувати з тексту</button>
@@ -279,7 +277,7 @@
   }
   track("visit");
 
-  const screen = document.getElementById("screen");
+  const waveEl = document.getElementById("wave");
   const recBtn = document.getElementById("recBtn");
   const clearBtn = document.getElementById("clearBtn");
   const tmplSel = document.getElementById("tmplSel");
@@ -293,8 +291,10 @@
   const pdfBtn = document.getElementById("pdfBtn");
   const progWrap = document.getElementById("progWrap");
   const progBar = document.getElementById("progBar");
-  const levelEl = document.getElementById("level");
-  const levelBar = document.getElementById("levelBar");
+  // Хвиля: генеруємо бари один раз (висоту анімуємо від звуку)
+  const WAVE_BARS = 48;
+  const waveBars = [];
+  for (let _i = 0; _i < WAVE_BARS; _i++){ const _b = document.createElement("span"); _b.className = "wave-bar"; waveEl.appendChild(_b); waveBars.push(_b); }
   const flagNav = document.getElementById("flagNav");
   const flagCount = document.getElementById("flagCount");
   const trialEl = document.getElementById("trial");
@@ -395,31 +395,37 @@
     else { progWrap.classList.remove("show"); progBar.style.width = "0%"; }
   }
 
-  // ── Живий рівень мікрофона: підтверджує лікарю, що його чують ──
-  let audioCtx = null, analyser = null, levelRAF = 0;
-  function startLevel(stream){
+  // ── Хвиля: бари рухаються від звуку (підтверджує лікарю, що його чують) ──
+  let audioCtx = null, analyser = null, waveRAF = 0, waveData = null;
+  function startWave(stream){
     try{
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const src = audioCtx.createMediaStreamSource(stream);
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
+      analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.82;
       src.connect(analyser);
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      levelEl.classList.add("show");
+      waveData = new Uint8Array(analyser.frequencyBinCount);
+      waveEl.classList.add("live");
+      const n = waveBars.length, bins = waveData.length;
       const tick = () => {
-        analyser.getByteFrequencyData(data);
-        let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i];
-        const pct = Math.min(100, (sum / data.length / 130) * 100);  // 0..255 → 0..100, з форою
-        levelBar.style.width = pct.toFixed(0) + "%";
-        levelRAF = requestAnimationFrame(tick);
+        analyser.getByteFrequencyData(waveData);
+        for (let i = 0; i < n; i++){
+          const dist = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);   // 0 центр .. 1 краї
+          const idx = Math.min(bins - 1, Math.floor(dist * bins * 0.7));
+          const v = waveData[idx] / 255;                            // 0..1
+          const h = 0.14 + v * 0.92 * (1 - 0.28 * dist);            // мін висота + динаміка, краї нижчі
+          waveBars[i].style.transform = "scaleY(" + Math.min(1, h).toFixed(3) + ")";
+        }
+        waveRAF = requestAnimationFrame(tick);
       };
       tick();
-    }catch(_){ /* без рівня — не критично */ }
+    }catch(_){ /* без хвилі — не критично */ }
   }
-  function stopLevel(){
-    if (levelRAF){ cancelAnimationFrame(levelRAF); levelRAF = 0; }
-    levelEl.classList.remove("show");
-    levelBar.style.width = "0%";
+  function stopWave(){
+    if (waveRAF){ cancelAnimationFrame(waveRAF); waveRAF = 0; }
+    waveEl.classList.remove("live");
+    waveBars.forEach(b => b.style.transform = "scaleY(.14)");
     if (audioCtx){ try{ audioCtx.close(); }catch(_){} audioCtx = null; analyser = null; }
   }
 
@@ -445,11 +451,6 @@
   document.getElementById("flagNext").addEventListener("click", () => jumpFlag(1));
   document.getElementById("flagPrev").addEventListener("click", () => jumpFlag(-1));
 
-  // Якщо людина прокрутила вгору — не смикаємо екран; повернулась донизу — знову автоскрол
-  screen.addEventListener("scroll", () => {
-    stickToBottom = screen.scrollTop + screen.clientHeight >= screen.scrollHeight - 40;
-  });
-
   const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
   if (!canRecord) {
     setStatus("Цей браузер не підтримує запис аудіо. Оновіть браузер (Chrome, Safari, Edge).", true);
@@ -461,18 +462,8 @@
     statusEl.className = "status" + (isErr ? " err" : "");
   }
 
-  function render(interim){
-    screen.innerHTML = "";
-    if (finalText) screen.append(document.createTextNode(finalText));
-    const preview = (liveText + (interim || "")).trim();
-    if (preview){
-      const s = document.createElement("span");
-      s.className = "interim";
-      s.textContent = (finalText ? " " : "") + preview;
-      screen.append(s);
-    }
-    if (stickToBottom) screen.scrollTop = screen.scrollHeight;
-    genBtn.disabled = trialExpired || !(finalText.trim() || recording || liveText.trim());
+  function render(){
+    genBtn.disabled = trialExpired || !(finalText.trim() || recording);
   }
 
   // Найкращий підтримуваний формат запису (opus компактний; Safari віддає mp4).
@@ -485,8 +476,8 @@
   // ── Живе заповнення шаблону ПІД ЧАС диктовки (чернетка) ──
   // Після кожного розпізнаного чанка з невеликою затримкою шлемо весь текст-досі у
   // /api/autofill (Nova) і малюємо заповнений шаблон у #doc. Чистовик — Sonnet на стопі.
-  let autofillTimer = null, autofillSeq = 0, autofillBusy = false, lastSkeletonTmpl = null;
-  function dictationSoFar(){ return (finalText + (finalText && liveText ? " " : "") + liveText).trim(); }
+  let lastSkeletonTmpl = null;
+  function dictationSoFar(){ return finalText.trim(); }
   function curTemplate(){ return tmplSel.hidden ? undefined : tmplSel.value; }
   function renderProtocolHtml(html){
     doc.innerHTML = String(html || "").replace(/\[\?\]/g, '<span class="flag">[?]</span>');
@@ -494,95 +485,53 @@
   }
   // Порожній бланк шаблону — щоб лікар ОДРАЗУ бачив форму ще до диктовки.
   async function showSkeleton(force){
-    if (recording || dictationSoFar()) return;          // під час запису/з текстом форму веде autofill
+    if (dictationSoFar()) return;                       // вже є транскрипт → форму веде готовий протокол
     const tmpl = curTemplate() || "";
     if (!force && lastSkeletonTmpl === tmpl && doc.innerHTML.trim()) return;
     try{
       const r = await fetch("/api/skeleton" + (tmpl ? "?template=" + encodeURIComponent(tmpl) : ""), { cache:"no-store" });
       if (!r.ok) return;
       const data = await r.json();
-      if (data.html && !recording && !dictationSoFar()){ renderProtocolHtml(data.html); lastSkeletonTmpl = tmpl; }
+      if (data.html && !dictationSoFar()){ renderProtocolHtml(data.html); lastSkeletonTmpl = tmpl; }
     }catch(_){}
   }
-  function scheduleAutofill(){
-    if (trialExpired) return;
-    clearTimeout(autofillTimer);
-    autofillTimer = setTimeout(() => runAutofill(false), 1500);   // debounce ~1.5 с після чанка
+  // Рендер фінального протоколу з ефектом «оживання»: блоки з'являються по черзі (видно, як Claude заповнює).
+  function renderProtocolAnimated(html){
+    renderProtocolHtml(html);
+    const blocks = Array.prototype.slice.call(doc.children);
+    blocks.forEach((el, i) => {
+      el.style.opacity = "0"; el.style.transform = "translateY(8px)";
+      el.style.transition = "opacity .4s ease, transform .4s ease";
+      setTimeout(() => { el.style.opacity = "1"; el.style.transform = "none"; }, Math.min(2200, 70 * i));
+    });
   }
-  // isFinal=true — фінальний прохід по ПОВНОМУ тексту на стопі (рендериться навіть коли запис уже зупинено).
-  async function runAutofill(isFinal){
-    if (autofillBusy){ if (isFinal) setTimeout(() => runAutofill(true), 400); else scheduleAutofill(); return; }
-    const text = dictationSoFar();
-    if (!text) return;
-    if (!isFinal && !recording) return;                 // проміжні проходи — лише під час запису
-    const seq = ++autofillSeq;
-    autofillBusy = true;
+
+  // ── Запис: ОДИН безперервний MediaRecorder. На стопі — транскрипція всього запису
+  //    одним файлом (повний контекст → краще тримає терміни), далі Sonnet формує протокол. ──
+  let mediaRec = null, recChunks = [];
+  function onRecStopped(){
+    const blob = new Blob(recChunks, { type: (mediaRec && mediaRec.mimeType) || "audio/webm" });
+    micStream = null; recChunks = [];
+    if (!blob.size){ setStatus("Нічого не записано — спробуйте ще раз.", true); render(); return; }
+    transcribeAndGenerate(blob);
+  }
+  async function transcribeAndGenerate(blob){
+    setStatus("Розпізнаю запис…");                     // 1) транскрипція всього запису
+    let text = "";
     try{
-      const r = await fetch("/api/autofill", {
-        method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text, uid, template: curTemplate() })
-      });
+      const fd = new FormData();
+      fd.append("audio", blob, "rec.webm");
+      fd.append("uid", uid);
+      const r = await fetch("/api/transcribe", { method: "POST", body: fd });
       const data = await r.json().catch(() => ({}));
-      // Фінальний прохід рендеримо завжди; проміжний — лише якщо це найсвіжіший і ще йде запис.
-      if (r.ok && data.html && (isFinal || (seq === autofillSeq && recording))){
-        renderProtocolHtml(data.html);
-        if (!isFinal) setStatus("Заповнюю протокол наживо…");
-      }
-    }catch(_){ /* прев'ю best-effort — мовчки ігноруємо */ }
-    finally{ autofillBusy = false; }
-  }
-
-  // Живий текст через Groq: пишемо короткими сегментами (~8 с), кожен одразу
-  // транскрибуємо й дописуємо. Працює в усіх браузерах (зокрема Safari). Жодних
-  // великих файлів — тому нема 413, і довгі обстеження фіналізуються миттєво.
-  function startSegment(){
-    if (!micStream) return;
-    segChunks = [];
-    const mime = pickMime();
-    const opts = { audioBitsPerSecond: SEG_BPS };
-    if (mime) opts.mimeType = mime;
-    segRec = new MediaRecorder(micStream, opts);
-    segRec.ondataavailable = (e) => { if (e.data && e.data.size) segChunks.push(e.data); };
-    segRec.onstop = async () => {
-      const wasRecording = recording;
-      const blob = new Blob(segChunks, { type: (segRec && segRec.mimeType) || "audio/webm" });
-      if (wasRecording) startSegment();      // ще пишемо — одразу наступний сегмент
-      if (blob.size){
-        if (!wasRecording) setStatus("Завершую розпізнавання…");
-        try{
-          const fd = new FormData();
-          fd.append("audio", blob, "seg.webm");
-          fd.append("uid", uid);
-          const r = await fetch("/api/transcribe", { method: "POST", body: fd });
-          const data = await r.json();
-          if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); saveDraft(); scheduleAutofill(); }
-        }catch(_){
-          // Сегмент не дійшов (мережа) — НЕ ховаємо тихо: рахуємо й показуємо, щоб лікар передиктував.
-          droppedSegs++;
-          setStatus("⚠ " + droppedSegs + " фрагмент(и) не розпізнано (мережа?) — передиктуйте пропущене перед формуванням протоколу.", true);
-        }
-      }
-      if (!wasRecording) finalizeText();     // це був останній сегмент → фіналізуємо
-    };
-    segRec.start();
-  }
-
-  function finalizeText(){
-    clearTimeout(autofillTimer);                       // зупиняємо проміжні проходи
-    doc.contentEditable = "true";                      // після стопу протокол знову редагований
-    if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-    if (liveText.trim()) finalText += (finalText ? " " : "") + liveText.trim();
-    liveText = "";
-    render("");
-    if (finalText.trim()) runAutofill(true);           // ФІНАЛЬНИЙ прохід по повному тексту (рендериться після стопу)
-    const transSec = recStopAt ? Math.max(0, Math.round((Date.now() - recStopAt) / 1000)) : 0;
-    timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнавання " + transSec + "с";
-    setStatus(droppedSegs
-      ? "⚠ " + droppedSegs + " фрагмент(и) не розпізнано (мережа?) — передиктуйте пропущене перед формуванням протоколу."
-      : finalText.trim() ? "Готово. Перевірте текст і натисніть «Сформувати протокол»."
-      : "Нічого не розпізнано — спробуйте ще раз.", droppedSegs ? true : !finalText.trim());
-    saveDraft();
-    if (finalizeResolve){ finalizeResolve(); finalizeResolve = null; }
+      if (!r.ok) throw new Error(data.error || "Помилка розпізнавання.");
+      text = (data.text || "").trim();
+    }catch(err){
+      setStatus(err.message || "Не вдалося розпізнати аудіо.", true); render(); return;
+    }
+    if (!text){ setStatus("Нічого не розпізнано — спробуйте ще раз.", true); render(); return; }
+    finalText = text; saveDraft(); render();
+    generateProtocol();                                // 2) Sonnet формує протокол (з анімацією)
   }
 
   async function startRec(){
@@ -592,64 +541,58 @@
       setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
       return;
     }
-    liveText = ""; droppedSegs = 0;
-    // На час запису блокуємо ручне редагування (форму веде автозаповнення; правки — після стопу).
-    // #doc не чистимо — лишаємо видимий бланк, autofill його дозаповнить, коли підуть чанки.
+    finalText = ""; recChunks = [];
     flagNav.classList.remove("show"); doc.contentEditable = "false";
-    if (!dictationSoFar()) showSkeleton(true);         // показати порожній бланк перед першим чанком
-    startLevel(micStream);                             // живий рівень мікрофона
-    startSegment();                                    // перший сегмент
-    segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле + стартує наступний
-      if (segRec && segRec.state === "recording"){ try{ segRec.stop(); }catch(_){} }
-    }, SEG_MS);
+    showSkeleton(true);                                // порожній бланк видно під час запису
+    const mime = pickMime();
+    const opts = { audioBitsPerSecond: SEG_BPS };
+    if (mime) opts.mimeType = mime;
+    mediaRec = new MediaRecorder(micStream, opts);
+    mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop = onRecStopped;
+    mediaRec.start(1000);                              // дані щосекунди (страховка від втрати при краху)
+    startWave(micStream);
     recording = true;
     recStartedAt = Date.now();
     track("rec_start");
     recBtn.classList.add("recording");
     recBtn.innerHTML = '<span class="dot"></span>Зупинити запис';
     setStatus("Йде запис — диктуйте.");
-    // живий секундомір запису
     timerEl.textContent = "● запис 0:00";
     recTimer = setInterval(() => { timerEl.textContent = "● запис " + fmtT(Date.now() - recStartedAt); }, 500);
-    render("");
+    genBtn.disabled = true;
   }
 
-  // Зупиняє запис; останній сегмент дотранскрибовується, тоді finalizeText().
-  // Повертає проміс, що резолвиться по завершенні (щоб «Сформувати» міг дочекатись).
+  // Зупиняє запис → onRecStopped() (транскрипція всього файлу + Sonnet).
   function stopRec(){
-    if (!recording) return transcribing || Promise.resolve();
+    if (!recording) return;
     recording = false;
-    stopLevel();
+    stopWave();
     if (recStartedAt){ lastRecDur = Date.now() - recStartedAt; track("rec_stop", Math.round(lastRecDur / 1000)); recStartedAt = 0; }
     if (recTimer){ clearInterval(recTimer); recTimer = null; }
     recStopAt = Date.now();
-    timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнаю…";
+    if (micStream){ micStream.getTracks().forEach(t => t.stop()); }
     recBtn.classList.remove("recording");
     recBtn.innerHTML = '<span class="dot"></span>Почати запис';
-    if (segTimer){ clearInterval(segTimer); segTimer = null; }
-
-    transcribing = new Promise((resolve) => {
-      finalizeResolve = resolve;
-      if (segRec && segRec.state === "recording"){
-        try{ segRec.stop(); }catch(_){ finalizeText(); }   // onstop (wasRecording=false) → finalizeText()
-      }else{
-        finalizeText();
-      }
-    });
-    return transcribing;
+    doc.contentEditable = "true";
+    timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнаю…";
+    try{
+      if (mediaRec && mediaRec.state !== "inactive") mediaRec.stop();   // → onRecStopped
+      else onRecStopped();
+    }catch(_){ onRecStopped(); }
   }
 
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
 
   clearBtn.addEventListener("click", () => {
-    finalText = ""; liveText = ""; droppedSegs = 0; if (!recording) timerEl.textContent = "";
-    doc.innerHTML = ""; showFlagNav(); render(""); wipeDraft();   // чистимо й протокол → новий пацієнт не успадкує старий
+    finalText = ""; if (!recording) timerEl.textContent = "";
+    doc.innerHTML = ""; showFlagNav(); render(); wipeDraft();   // чистимо й протокол → новий пацієнт не успадкує старий
+    lastSkeletonTmpl = null; showSkeleton(true);                // показати порожній бланк знову
   });
 
-  genBtn.addEventListener("click", async () => {
+  // Формування протоколу: Sonnet → анімований рендер. Викликається авто на стопі ТА кнопкою.
+  async function generateProtocol(){
     if (trialExpired){ setStatus("Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.", true); return; }
-    if (recording) await stopRec();      // зупинити запис і дочекатись розпізнавання
-    else if (transcribing) await transcribing;
     if (!finalText.trim()){ setStatus("Немає тексту для протоколу — спершу зробіть запис.", true); return; }
     genBtn.disabled = true;
     flagNav.classList.remove("show");
@@ -662,7 +605,7 @@
       const r = await fetch("/api/protocol", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text: finalText, uid, template: tmplSel.hidden ? undefined : tmplSel.value })
+        body: JSON.stringify({ text: finalText, uid, template: curTemplate() })
       });
       gotResponse = true;
       const data = await r.json();
@@ -674,7 +617,7 @@
       timerEl.textContent = "протокол за " + (ms/1000).toFixed(1).replace(".", ",") + " с"
         + (data.provider ? " · " + data.provider : "");
       doc.contentEditable = "true";          // чистовик редагований
-      renderProtocolHtml(data.html);
+      renderProtocolAnimated(data.html);     // ефект «оживання»: блоки з'являються по черзі
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
@@ -691,13 +634,14 @@
     }finally{
       genBtn.disabled = trialExpired || !finalText.trim();
     }
-  });
+  }
+  genBtn.addEventListener("click", generateProtocol);
 
-  // Тестовий акаунт: згенерувати протокол із вставленого тексту (без диктовки) — реюз потоку genBtn.
+  // Тестовий акаунт: згенерувати протокол із вставленого тексту (без диктовки).
   pasteGenBtn.addEventListener("click", () => {
     const t = pasteBox.value.trim();
     if (!t){ setStatus("Встав текст диктовки для генерації.", true); return; }
-    liveText = ""; finalText = t; render(""); genBtn.click();
+    finalText = t; render(); generateProtocol();
   });
 
   // ── Тестовий період (14 днів від першого протоколу) ──
