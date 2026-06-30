@@ -1646,15 +1646,23 @@ function stripFences(s) {
 // inline-стилі. Модель генерує легкий HTML (швидко, без обриву по токенах), а тут детерміновано
 // підставляємо стилі — у фіналі повні inline-стилі (ідеальна вставка у Word). Для інших шаблонів
 // no-op: вони не містять <table class="zt"> чи голих <td>/<th> (там стилі вже inline).
-const ZOO_TABLE = 'border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px';
+const ZOO_FONT = "'Times New Roman', serif";
+const ZOO_TABLE = `border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px;font-family:${ZOO_FONT}`;
 const ZOO_TD = 'border:1px solid #999;padding:4px 7px;vertical-align:top';
 const ZOO_TH = 'border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5';
+// Заголовки секцій ZOOLUX — звичайні чорні жирні (як у PDF лікаря), а не бірюзові ВЕЛИКІ з розрядкою.
+const ZOO_H3 = `font-family:${ZOO_FONT};font-size:14px;font-weight:700;text-transform:none;letter-spacing:0;color:#000;margin:12px 0 6px`;
+const ZOO_H2 = `font-family:${ZOO_FONT};text-align:center`;
 function expandZooTables(html) {
   if (!html || html.indexOf('class="zt"') === -1) return html;
-  return html
+  const out = html
     .replace(/<table class="zt">/g, `<table style="${ZOO_TABLE}">`)
     .replace(/<th>/g, `<th style="${ZOO_TH}">`)
-    .replace(/<td>/g, `<td style="${ZOO_TD}">`);
+    .replace(/<td>/g, `<td style="${ZOO_TD}">`)
+    .replace(/<h2>/g, `<h2 style="${ZOO_H2}">`)
+    .replace(/<h3>/g, `<h3 style="${ZOO_H3}">`);
+  // Єдиний шрифт усього протоколу — Times New Roman (in-app і в експорті Word/PDF).
+  return `<div style="font-family:${ZOO_FONT}">${out}</div>`;
 }
 
 // ── Провайдери формування протоколу (пріоритет: Bedrock → Anthropic API → Max CLI) ──
