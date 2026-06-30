@@ -1174,8 +1174,11 @@ function promptFor(user, requestedTemplate) {
 // Які тестери сидять на цьому шаблоні (нік(и)) — для випадайки demo, щоб видно було
 // «цей шаблон = протокол такого-то лікаря». Реверс PROMPTS_BY_USER (логіни поза мапою → default).
 function testersForTemplate(key) {
+  // лікар «на» шаблоні = його первинний (PROMPTS_BY_USER) АБО шаблон у його наборі вибору
+  // (TEMPLATE_CHOICES_BY_USER) — інакше додаткові шаблони (напр. ЕХОКГ Долгушиної) показувались «не призначено».
   return Object.keys(NICKNAMES_BY_USER)
-    .filter((u) => !NEUTRAL_USERS.has(u) && (PROMPTS_BY_USER[u] || "default") === key)
+    .filter((u) => !NEUTRAL_USERS.has(u) &&
+      ((PROMPTS_BY_USER[u] || "default") === key || (TEMPLATE_CHOICES_BY_USER[u] || []).includes(key)))
     .map(nickOf);
 }
 
