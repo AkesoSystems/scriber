@@ -2095,6 +2095,13 @@ app.post("/api/protocol", async (req, res) => {
   const user = getAuthUser(req);
   const uid = (req.body && req.body.uid) || "server";
 
+  // Генерація З ТЕКСТУ (paste «Згенерувати з тексту») — лише demo (нейтральний QA).
+  // Диктовка (fromText відсутній/false) доступна всім; гейт лише за trial нижче.
+  if (req.body && req.body.fromText && !NEUTRAL_USERS.has(user)) {
+    logEvent(uid, "generate_err", null, user, { stage: "generate", code: "text_gen_disabled" });
+    return res.status(403).json({ error: "Генерація з тексту доступна лише на демо-акаунті.", genDisabled: true });
+  }
+
   // Тестовий період вичерпано → блокуємо генерацію (серверна перевірка, обійти з клієнта не можна).
   const trial = trialState(user);
   if (trial.expired) {

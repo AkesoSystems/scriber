@@ -579,7 +579,7 @@
   });
 
   // Формування протоколу: Sonnet → анімований рендер. Викликається авто на стопі ТА кнопкою.
-  async function generateProtocol(){
+  async function generateProtocol(fromText){
     if (trialExpired){ setStatus(trialOverMsg(), true); return; }
     if (!finalText.trim()){ setStatus("Немає тексту для протоколу — спершу зробіть запис.", true); return; }
     genBtn.disabled = true;
@@ -593,7 +593,7 @@
       const r = await fetch("/api/protocol", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text: finalText, uid, template: curTemplate() })
+        body: JSON.stringify({ text: finalText, uid, template: curTemplate(), fromText: !!fromText })
       });
       gotResponse = true;
       const data = await r.json();
@@ -623,13 +623,13 @@
       genBtn.disabled = trialExpired || !finalText.trim();
     }
   }
-  genBtn.addEventListener("click", generateProtocol);
+  genBtn.addEventListener("click", () => generateProtocol(false));
 
   // Тестовий акаунт: згенерувати протокол із вставленого тексту (без диктовки).
   pasteGenBtn.addEventListener("click", () => {
     const t = pasteBox.value.trim();
     if (!t){ setStatus("Встав текст диктовки для генерації.", true); return; }
-    finalText = t; render(); generateProtocol();
+    finalText = t; render(); generateProtocol(true);
   });
 
   // ── Тестовий період (TRIAL_DAYS від першого протоколу, термін задає сервер) ──
