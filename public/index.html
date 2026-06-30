@@ -227,7 +227,7 @@
       <span class="timer" id="timer"></span>
     </div>
     <div class="hint">Натисніть «Почати запис» і диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
-      Після зупинки система розпізнає весь запис і Claude заповнить протокол. Сумнівні місця — <b>[?]</b>, перевірте перед збереженням.</div>
+      Після «Зупинити» система розпізнає запис; далі натисніть «Сформувати протокол», і Claude його заповнить. Сумнівні місця — <b>[?]</b>, перевірте перед збереженням.</div>
     <div id="pasteWrap" hidden style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
       <textarea id="pasteBox" rows="4" placeholder="Тестовий акаунт: встав сюди текст диктовки (поганий або ідеальний) і натисни «Згенерувати з тексту»" style="width:100%;font:14px/1.45 inherit;padding:8px;border:1px solid #ccc;border-radius:8px;resize:vertical;box-sizing:border-box"></textarea>
       <button id="pasteGenBtn" class="btn-ghost" style="align-self:flex-start">Згенерувати з тексту</button>
@@ -513,10 +513,11 @@
     const blob = new Blob(recChunks, { type: (mediaRec && mediaRec.mimeType) || "audio/webm" });
     micStream = null; recChunks = [];
     if (!blob.size){ setStatus("Нічого не записано — спробуйте ще раз.", true); render(); return; }
-    transcribeAndGenerate(blob);
+    transcribeRecording(blob);
   }
-  async function transcribeAndGenerate(blob){
-    setStatus("Розпізнаю запис…");                     // 1) транскрипція всього запису
+  // «Зупинити» лише зупиняє запис і РОЗПІЗНАЄ. Протокол формується окремо — кнопкою «Сформувати протокол».
+  async function transcribeRecording(blob){
+    setStatus("Розпізнаю запис…");
     let text = "";
     try{
       const fd = new FormData();
@@ -530,8 +531,9 @@
       setStatus(err.message || "Не вдалося розпізнати аудіо.", true); render(); return;
     }
     if (!text){ setStatus("Нічого не розпізнано — спробуйте ще раз.", true); render(); return; }
-    finalText = text; saveDraft(); render();
-    generateProtocol();                                // 2) Sonnet формує протокол (з анімацією)
+    finalText = text; saveDraft(); render();           // зберігаємо транскрипт; genBtn вмикається через render()
+    timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнано";
+    setStatus("Запис розпізнано. Натисніть «Сформувати протокол».");
   }
 
   async function startRec(){
