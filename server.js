@@ -497,8 +497,8 @@ const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що 
 ФОРМАТ — лише HTML-фрагмент (без <html>, <head>, <body>, без markdown, без \`\`\`, без пояснень). Шрифт усього протоколу — Times New Roman, рамки чорні (1px solid #000), заголовки секцій — жирні по центру БЕЗ заливки (як у файлі лікаря):
 - Заголовок по центру: <h2 style="text-align:center;font-family:'Times New Roman',serif">Ехокардіографічне обстеження</h2>.
 - ОДНА таблиця <table style="border-collapse:collapse;width:100%;margin:0 0 14px;font-family:'Times New Roman',serif;font-size:13px">.
-- Звичайна клітинка: <td style="border:1px solid #000;padding:5px 8px;vertical-align:top">; значення — у <em>.
-- Заголовок-рядок (Праве передсердя, Тристулковий клапан тощо): <td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">.
+- Звичайна клітинка: <td style="border:1px solid #000;padding:1px 5px;vertical-align:top">; значення — у <em>.
+- Заголовок-рядок (Праве передсердя, Тристулковий клапан тощо): <td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">.
 - НЕ використовуй <h3>, не розбивай на кілька таблиць.
 
 ВИКОРИСТАЙ РІВНО ТАКУ СТРУКТУРУ (підстав значення у місця з [?]; поля пацієнта лиши порожніми; якісні значення заміни лише за наявності патології в диктовці):
@@ -512,48 +512,48 @@ const SYSTEM_PROMPT_TESTER3 = `Ти — медичний редактор, що 
 <strong>Вага:</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Зріст:</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Площа поверхні тіла:</strong></p>
 
 <table style="border-collapse:collapse;width:100%;margin:0 0 14px;font-family:'Times New Roman',serif;font-size:13px">
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top">Розташування передсердь</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Solitus</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top">Розташування серця</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Лівокардія</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top">Серце</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Двошлуночкове</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top">Передсердно шлуночкове сполучення</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Конкордантне</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top">Шлуночково-артеріальне сполучення</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Конкордантне</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top">Хід магістральних судин</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Перехресний</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top">Розташування передсердь</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Solitus</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top">Розташування серця</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Лівокардія</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top">Серце</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Двошлуночкове</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top">Передсердно шлуночкове сполучення</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Конкордантне</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top">Шлуночково-артеріальне сполучення</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Конкордантне</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top">Хід магістральних судин</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Перехресний</em></td></tr>
 
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Праве передсердя</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Ліве передсердя</td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Розмір</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>норма</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Розмір [?] мм</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>норма</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Порожнисті вени</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Впадають</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Легеневі вени</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Впадають всі</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Безіменна вена</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Наявна, діаметр [?]</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Додаткова ВПВ</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>немає</em></td><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Міжпередсердна перетинка</td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Коронарний синус</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Не розширений</em></td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>інтактна</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Праве передсердя</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Ліве передсердя</td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Розмір</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>норма</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Розмір [?] мм</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>норма</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Порожнисті вени</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Впадають</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Легеневі вени</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Впадають всі</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Безіменна вена</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Наявна, діаметр [?]</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Додаткова ВПВ</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>немає</em></td><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Міжпередсердна перетинка</td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Коронарний синус</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Не розширений</em></td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>інтактна</em></td></tr>
 
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Тристулковий клапан</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Мітральний клапан</td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Діаметр</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Діаметр</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Швидкість</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] м/с</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Швидкість</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] м/с</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Недостатність</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>відсутня</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Недостатність</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>відсутня</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Тристулковий клапан</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Мітральний клапан</td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Діаметр</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Діаметр</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Швидкість</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] м/с</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Швидкість</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] м/с</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Недостатність</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>відсутня</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Недостатність</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>відсутня</em></td></tr>
 
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Правий шлуночок</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Лівий шлуночок</td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Порожнина</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>не розширена</em></td><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Порожнина — норма, до верхівки доходить</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Скоротливість</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>добра</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Скоротливість</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Добра; ФВ = [?] %</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">До верхівки</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>доходить</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">КДР/КДО/КДІ</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм / [?] мл / [?] мл/м²</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">ТМШП/ТЗСЛШ</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм / [?] мм</em></td></tr>
-<tr><td colspan="4" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>Міжшлуночкова перетинка</strong> — <em>інтактна</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Правий шлуночок</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Лівий шлуночок</td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Порожнина</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>не розширена</em></td><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Порожнина — норма, до верхівки доходить</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Скоротливість</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>добра</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Скоротливість</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Добра; ФВ = [?] %</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">До верхівки</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>доходить</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">КДР/КДО/КДІ</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм / [?] мл / [?] мл/м²</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">ТМШП/ТЗСЛШ</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм / [?] мм</em></td></tr>
+<tr><td colspan="4" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>Міжшлуночкова перетинка</strong> — <em>інтактна</em></td></tr>
 
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Легенева артерія</td><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Аорта</td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Клапан ЛА</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Клапан Ао</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Стовбур ЛА</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Синус Вальсальви</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Права гілка ЛА</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">ST сполучення</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Ліва гілка ЛА</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Клапан Ао</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>тристулковий</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">ΔР max клапан</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм.рт.ст</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">ΔР max клапан</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм.рт.ст</em></td></tr>
-<tr><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">недостатність</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>відсутня</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">недостатність</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>відсутня</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Легенева артерія</td><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Аорта</td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Клапан ЛА</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Клапан Ао</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Стовбур ЛА</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Синус Вальсальви</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Права гілка ЛА</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">ST сполучення</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Ліва гілка ЛА</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм (Z,SD = [?]; N = [?] мм)</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Клапан Ао</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>тристулковий</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">ΔР max клапан</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм.рт.ст</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">ΔР max клапан</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм.рт.ст</em></td></tr>
+<tr><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">недостатність</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>відсутня</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">недостатність</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>відсутня</em></td></tr>
 
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>Відкрита артеріальна протока</strong> — <em>відсутня</em></td><td colspan="2" style="border:1px solid #000;padding:5px 8px;text-align:center;font-weight:bold">Дуга аорти</td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>Легенева гіпертензія</strong> — <em>відсутня</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">ΔР max</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>[?] мм.рт.ст</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>Рідина в порожнині перикарду</strong> — <em>відсутня</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Дуга</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>лівостороння</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>В черевній аорті кровотік</strong> — <em>пульсуючий</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top">Коарктації аорти</td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>немає</em></td></tr>
-<tr><td colspan="2" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>Коронарні артерії</strong> — <em>без особливостей</em></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"></td><td style="border:1px solid #000;padding:5px 8px;vertical-align:top"></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>Відкрита артеріальна протока</strong> — <em>відсутня</em></td><td colspan="2" style="border:1px solid #000;padding:1px 5px;text-align:center;font-weight:bold">Дуга аорти</td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>Легенева гіпертензія</strong> — <em>відсутня</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">ΔР max</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>[?] мм.рт.ст</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>Рідина в порожнині перикарду</strong> — <em>відсутня</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Дуга</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>лівостороння</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>В черевній аорті кровотік</strong> — <em>пульсуючий</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top">Коарктації аорти</td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>немає</em></td></tr>
+<tr><td colspan="2" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>Коронарні артерії</strong> — <em>без особливостей</em></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"></td><td style="border:1px solid #000;padding:1px 5px;vertical-align:top"></td></tr>
 
-<tr><td colspan="4" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><em>Додаткові дані:</em> [за диктовкою; якщо нічого не продиктовано — лиши порожнім]</td></tr>
-<tr><td colspan="4" style="border:1px solid #000;padding:5px 8px;vertical-align:top"><strong>Висновок:</strong> [сформулюй за фактичними знахідками; норм-варіант — Даних за структурну патологію серця немає]</td></tr>
+<tr><td colspan="4" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><em>Додаткові дані:</em> [за диктовкою; якщо нічого не продиктовано — лиши порожнім]</td></tr>
+<tr><td colspan="4" style="border:1px solid #000;padding:1px 5px;vertical-align:top"><strong>Висновок:</strong> [сформулюй за фактичними знахідками; норм-варіант — Даних за структурну патологію серця немає]</td></tr>
 </table>
 
 <p style="font-family:'Times New Roman',serif"><strong>Лікар-кардіолог дитячий Шипов Д.О.</strong></p>
@@ -739,24 +739,25 @@ const SYSTEM_PROMPT_VASYL_ABDOMEN = "ВАЖЛИВО: ЗАВЖДИ викорис
 const SYSTEM_PROMPT_VASYL_THYROID = "ВАЖЛИВО: ЗАВЖДИ використовуй ШАБЛОН Б (щитоподібна залоза), незалежно від змісту диктовки. Не обирай інший шаблон і не формуй суцільний опис.\n\n" + SYSTEM_PROMPT_TESTER2;
 
 // ───────────── Промпт для test5: ВЕТЕРИНАРНІ протоколи (формат клініки ZOOLUX) ─────────────
-// Два типи: УЗД (експертне) черевної порожнини і ЕХО КГ (експертна). Модель сама визначає тип;
-// інше → дефолтний суцільний опис. Поля шапки порожні. Незгадане/сумнівне → [?]; колонки
-// Норма/Відхилення лишаються "-" (їх рахує система клініки); висновок — по фактичних знахідках.
+// Два типи (ПОВНІ, як у бланках ZOOLUX, БЕЗ емблем/логотипа/брендингу — суто текст):
+// ШАБЛОН А «УЗД (експертне)» ОЧП і ШАБЛОН Б «ЕХО КГ (експертна)». Модель сама визначає тип;
+// інше → суцільний опис. Поля шапки порожні. Незгадане → [?]; норм-діапазони зашиті в шаблоні;
+// Відхилення в бланку "-"; висновок — по фактичних знахідках.
 const SYSTEM_PROMPT_TESTER5 = `Ти — медичний редактор, що оформлює ВЕТЕРИНАРНІ протоколи УЗД у форматі клініки ZOOLUX українською мовою.
 
 Тобі дають СИРИЙ текст диктовки лікаря (результат розпізнавання мовлення, можливі помилки розпізнавання).
 
 КРОК 1 — ВИЗНАЧ ТИП ДОСЛІДЖЕННЯ з диктовки:
 - Органи черевної порожнини (сечовий міхур, уретра, нирки, селезінка, печінка, жовчний міхур, підшлункова залоза, шлунок, кишечник, лімфовузли) → ШАБЛОН А «УЗД (експертне)».
-- Серце / ехокардіографія (лівий/правий шлуночок, передсердя, клапани, аорта, легенева артерія, фракція, регургітація, перикард) → ШАБЛОН Б «ЕХО КГ (експертна)».
+- Серце / ехокардіографія (лівий/правий шлуночок, передсердя, клапани, аорта, легенева артерія, фракція, регургітація, перикард, легенева гіпертензія) → ШАБЛОН Б «ЕХО КГ (експертна)».
 - Інше або незрозуміло → НЕ бери шаблон, а оформи суцільний опис: <h2> з назвою + абзаци <p> + фінальний <p> "Висновок:".
 
 КРОК 2 — ПРАВИЛА ЗАПОВНЕННЯ:
 0. ВІДТВОРИ ОБРАНИЙ ШАБЛОН ПОВНІСТЮ І ДОСЛІВНО: усі розділи (<h3>), усі рядки, усі параметри й УСІ рядки таблиць — навіть ті, яких лікар не згадав. НЕ скорочуй, НЕ об'єднуй, НЕ пропускай розділи й не перетворюй таблиці на абзаци. Незгадані значення стають [?], якісні норм-формулювання лишаються як є. Структура виходу = структура шаблону 1:1.
-1. Поля шапки (Пацієнт, Власник, Контактна інформація, Призначив, Дослідження провів) лиши ПОРОЖНІМИ — їх заповнюють у системі клініки. НЕ вписуй кличку/власника/контакти навіть якщо продиктовано.
+1. БЕЗ ЕМБЛЕМ І БРЕНДИНГУ: жодних логотипів, рядків «зоолюкс.укр», «Сформовано», «Результат отриманий», посилань на zoolux.clinic. Поля шапки (Пацієнт, Власник, Контактна інформація, Призначив, Дослідження провів) лиши ПОРОЖНІМИ — їх заповнюють у системі клініки. НЕ вписуй кличку/власника/контакти навіть якщо продиктовано.
 2. Підставляй ЛИШЕ продиктовані числа й факти. Числа нормалізуй, десятковий роздільник — кома ("три цілих вісім" → "3,8").
-3. Незгадане значення → [?] на його місці (підсвітять). Колонки «Норма» і «Відхилення» ЗАПОВНЮЙ, якщо лікар їх продиктував: норму — як діапазон (напр. "30,0 - 50,0"), відхилення — зі стрілкою (вгору/підвищено → "▲29%", вниз/знижено → "▼33%", у межах норми → "норма"). Якщо лікар норму/відхилення НЕ назвав — лишай "-". НЕ вигадуй норми й відсотки самостійно.
-4. Якісні норм-формулювання шаблону (не потовщена, рівна, однорідна, не змінена, не розширена, не візуалізуються тощо) — це дефолти; якщо лікар продиктував патологію — ЗАМІНИ формулювання на продиктоване. Додаткові продиктовані знахідки дописуй у відповідний розділ.
+3. Незгадане числове значення → [?] на його місці (підсвітять). Норм-діапазони, вже зашиті в шаблоні (напр. "30,0 - 50,0"), лишай як є; нових норм НЕ вигадуй. Колонку «Відхилення» в порожньому бланку лишай "-"; заповнюй стрілкою (вгору → "▲29%", вниз → "▼33%", у межах норми → "норма") ЛИШЕ якщо лікар явно продиктував відхилення.
+4. Якісні норм-формулювання шаблону (не потовщена, рівна, однорідна, не змінена, не розширена, не візуалізуються, ламінарний, не виявлено тощо) — це дефолти; якщо лікар продиктував патологію — ЗАМІНИ формулювання на продиктоване. Додаткові продиктовані знахідки дописуй у відповідний розділ.
 5. Сумнівне/нерозчуте слово познач [?] одразу після нього.
 6. ІГНОРУЙ поза-контекст: розмови з власником, репліки до тварини, побутове — НЕ вписуй.
 7. Висновок/Заключення формулюй ПО СУТІ протоколу: якщо є патологія — вкажи саме її (як перелік УЗ-ознак); якщо все в межах норми — нормальний висновок.
@@ -764,7 +765,7 @@ const SYSTEM_PROMPT_TESTER5 = `Ти — медичний редактор, що 
 ФОРМАТ — лише HTML-фрагмент (без <html>/<head>/<body>, без markdown, без \`\`\`):
 - <h2> — назва дослідження; <h3> — розділи (органи/блоки).
 - Пари "параметр: значення" — <p> з <strong>Параметр:</strong> значення.
-- Вимірювання — <table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px"> з рядком-заголовком Показник | Результат | Одиниця | Норма | Відхилення; клітинки style="border:1px solid #999;padding:4px 7px;vertical-align:top", заголовкові <th> додатково background:#dce9f5;text-align:left; значення в колонці Результат — <strong>.
+- Вимірювання — КОМПАКТНА таблиця <table class="zt"> з рядком-заголовком <th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th>; кожен рядок <tr> з п'ятьма <td>; значення в колонці Результат — у <strong>. НЕ додавай атрибутів style до <table>/<td>/<th> і не вигадуй інших класів — рамки й оформлення підставляє система автоматично.
 
 ═══════ ШАБЛОН А — УЗД (експертне) ═══════
 
@@ -779,16 +780,20 @@ const SYSTEM_PROMPT_TESTER5 = `Ти — медичний редактор, що 
 
 <h3>Нирки</h3>
 <p><strong>Ліва нирка.</strong> Форма: овальна. Контур: рівний. Межі: чіткі. Кортико-медулярна диференціація: збережена. Кірковий шар: ехогенність не змінена, структура однорідна. Мозковий шар: ехогенність не змінена, структура однорідна. Співвідношення шарів: не змінено. Судинний малюнок: помірний. Включення: не візуалізуються. Утворення: не візуалізуються. Миска: не розширена. Сечовід: не розширений.</p>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">Довжина</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">мм</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">Кірковий шар (КШЛН) товщина</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">мм</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Довжина</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Кірковий шар (КШЛН) товщина</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення КШ/Ао ліва нирка</td><td>-</td><td></td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення К/Ао ліва нирка</td><td>-</td><td></td><td>-</td><td>-</td></tr>
 </table>
 <p><strong>Права нирка.</strong> Форма: овальна. Контур: рівний. Межі: чіткі. Кортико-медулярна диференціація: збережена. Кірковий шар: ехогенність не змінена, структура однорідна. Мозковий шар: ехогенність не змінена, структура однорідна. Співвідношення шарів: не змінено. Судинний малюнок: помірний. Включення: не візуалізуються. Утворення: не візуалізуються. Миска: не розширена. Сечовід: не розширений.</p>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">Довжина</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">мм</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">Кірковий шар (КШПН) товщина</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">мм</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td><td style="border:1px solid #999;padding:4px 7px;vertical-align:top">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Довжина</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Кірковий шар (КШПН) товщина</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення КШ/Ао права нирка</td><td>-</td><td></td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення К/Ао права нирка</td><td>-</td><td></td><td>-</td><td>-</td></tr>
 </table>
 
 <h3>Селезінка</h3>
@@ -809,15 +814,21 @@ const SYSTEM_PROMPT_TESTER5 = `Ти — медичний редактор, що 
 <p><strong>Порожня кишка.</strong> Стінка: не потовщена, [?] мм, співвідношення шарів не змінено. Наповнення: [?]. Перистальтика: [?].</p>
 <p><strong>Клубова кишка.</strong> Стінка: не потовщена, [?] мм, співвідношення шарів не змінено. Наповнення: [?].</p>
 <p><strong>Сліпа кишка.</strong> Стінка: не потовщена, [?] мм, співвідношення шарів не змінено. Наповнення: [?].</p>
-<p><strong>Ободова кишка.</strong> Стінка: не потовщена, [?] мм, співвідношення шарів не змінено. Наповнення: [?].</p>
+<p><strong>Ободова кишка.</strong> Стінка: не потовщена, [?] мм, співвідношення шарів не змінено. Наповнення: [?]. Перистальтика: [?].</p>
 
 <h3>Інше</h3>
 <p><strong>Лімфатичні вузли:</strong> не змінені<br><strong>Вільна рідина:</strong> не візуалізується<br><strong>Вільний газ:</strong> не візуалізується (норма)</p>
 
 <h3>Судини черевної порожнини</h3>
-<p><strong>Аорта.</strong> Співвідношення PV/Ao: -. Співвідношення CVC/Ao: -.</p>
+<p><strong>Аорта.</strong></p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Співвідношення PV/Ao</td><td>-</td><td></td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення CVC/Ao</td><td>-</td><td></td><td>-</td><td>-</td></tr>
+</table>
 
 <p><strong>Висновок:</strong> [сформулюй за фактичними знахідками як перелік УЗ-ознак; якщо патології немає — «На момент обстеження УЗ-ознак патології не виявлено»]</p>
+<p><strong>Примітка:</strong> Висновок УЗД не є остаточним діагнозом та повинен бути інтерпретований лікарем з урахуванням анамнезу, клінічної картини та всіх інших методів діагностики.</p>
 
 ═══════ ШАБЛОН Б — ЕХО КГ (експертна) ═══════
 
@@ -825,66 +836,149 @@ const SYSTEM_PROMPT_TESTER5 = `Ти — медичний редактор, що 
 <p><strong>Пацієнт:</strong> <br><strong>Власник:</strong> <br><strong>Контактна інформація:</strong> <br><strong>Призначив:</strong> <br><strong>Дослідження провів:</strong> </p>
 
 <h3>Лівий шлуночок (Left ventricle)</h3>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">МШП (VSd)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">КДР (IVDd)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">КСР (IVDs)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">ЗСЛШ (LVFWd)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">ФС (FS)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">%</td><td style="border:1px solid #999;padding:4px 7px">30,0 - 50,0</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">ФВ (EF%)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">%</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Ідеальна вага</td><td><strong>[?]</strong></td><td>кг</td><td>-</td><td>-</td></tr>
+<tr><td>МШП (VSd)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>КДР (IVDd)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>КДРн (LVDDn)</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>КСР (IVDs)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>КСРн (LVSDn)</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>ЗСЛШ (LVFWd)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>ФС (FS) %</td><td><strong>[?]</strong></td><td>%</td><td>30,0 - 50,0</td><td>-</td></tr>
+<tr><td>КДО (EDV)</td><td><strong>[?]</strong></td><td>мл</td><td>-</td><td>-</td></tr>
+<tr><td>КСО (ESV)</td><td><strong>[?]</strong></td><td>мл</td><td>-</td><td>-</td></tr>
+<tr><td>ФВ % (EF%)</td><td><strong>[?]</strong></td><td>%</td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення ЛШ/аорта у довгій вісі (LV/Ao long axis)</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>MAPSE мжп</td><td><strong>[?]</strong></td><td>мм</td><td>4,9 - 7,3</td><td>-</td></tr>
+<tr><td>EPSS</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>S'</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
 </table>
 <p><strong>Локальні зміни міокарду:</strong> не виявлено (норма)</p>
 
 <h3>Ліве передсердя (LAD)</h3>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">ЛП у довгій вісі (LAD long axis)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">ЛП у короткій вісі (LAD short axis)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">ЛП/Ао (LA/Ao short axis)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px"></td><td style="border:1px solid #999;padding:4px 7px">0,0 - 1,5</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>ЛП у довгій вісі (LAD long axis)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>LADn собаки</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>LADn коти</td><td><strong>[?]</strong></td><td></td><td>0,0 - 12,7</td><td>-</td></tr>
+<tr><td>ЛП у короткій вісі (LAD short axis)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Об'єм ЛП нормалізований (LAVn)</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>Об'єм ЛП</td><td><strong>[?]</strong></td><td>мл</td><td>-</td><td>-</td></tr>
+<tr><td>ЛВ (PV)</td><td><strong>[?]</strong></td><td>мм</td><td>1,5 - 4,0</td><td>-</td></tr>
+<tr><td>ПГЛА</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>ЛВ/ПГЛА (PV/RBPA)</td><td><strong>[?]</strong></td><td></td><td>0,5 - 1,0</td><td>-</td></tr>
+<tr><td>ЛП/Ао (LA/Ao short axis)</td><td><strong>[?]</strong></td><td></td><td>0,0 - 1,5</td><td>-</td></tr>
+<tr><td>ЛП/Ао у довгій вісі (LA/Ao long axis)</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>Швидкість у вушці лівого передсердя</td><td><strong>[?]</strong></td><td>м/с</td><td>0,30 - 0,90</td><td>-</td></tr>
+<tr><td>М-режим ЛП діастола</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>М-режим ЛП систола</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>FS ЛП %</td><td><strong>[?]</strong></td><td>%</td><td>0,0</td><td>-</td></tr>
 </table>
 
 <h3>Аорта (Aorta)</h3>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Діаметр аорти у короткій вісі (Ao short axis)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Швидкість потоку (Velocity)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">м/с</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Макс градієнт</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм рт.ст.</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Діаметр аорти у короткій вісі (Ao short axis)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Діаметр кільця у довгій вісі (Ao long axis)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
 </table>
 <p><strong>Морфологія стулок клапана:</strong> не змінені. <strong>Характеристика потоку:</strong> ламінарний.</p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Швидкість потоку (Velocity)</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+<tr><td>Макс градієнт</td><td><strong>[?]</strong></td><td>мм рт.ст.</td><td>-</td><td>-</td></tr>
+<tr><td>Середній градієнт тиску (тільки для стенозу)</td><td><strong>[?]</strong></td><td>мм.рт.ст.</td><td>-</td><td>-</td></tr>
+</table>
+<p><strong>Оцінка виносного тракту:</strong> [?]</p>
 
 <h3>Легенева артерія (Pulmonary artery)</h3>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Діаметр кільця клапана</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Швидкість потоку (Velocity)</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">м/с</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Макс градієнт</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">мм рт.ст.</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Діаметр кільця клапана</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Ао/ЛА</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
 </table>
 <p><strong>Морфологія стулок клапана:</strong> не змінені. <strong>Характеристика потоку:</strong> ламінарний.</p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Швидкість потоку (Velocity)</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+<tr><td>Макс градієнт</td><td><strong>[?]</strong></td><td>мм рт.ст.</td><td>-</td><td>-</td></tr>
+<tr><td>Середній градієнт тиску (тільки для стенозу)</td><td><strong>[?]</strong></td><td>мм.рт.ст.</td><td>-</td><td>-</td></tr>
+<tr><td>VTI (тільки для стенозу)</td><td><strong>[?]</strong></td><td>см</td><td>-</td><td>-</td></tr>
+</table>
+<p><strong>Включення у стовбурі легеневої артерії:</strong> [?]</p>
 
 <h3>Мітральний клапан (Mitral valve)</h3>
 <p><strong>Морфологія стулок клапана:</strong> не змінені. <strong>Характеристика потоку:</strong> ламінарний.</p>
-<table style="border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px">
-<tr><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Показник</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Результат</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Одиниця</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Норма</th><th style="border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5">Відхилення</th></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Пік Е</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">м/с</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Пік А</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px">м/с</td><td style="border:1px solid #999;padding:4px 7px">-</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
-<tr><td style="border:1px solid #999;padding:4px 7px">Е/А</td><td style="border:1px solid #999;padding:4px 7px"><strong>[?]</strong></td><td style="border:1px solid #999;padding:4px 7px"></td><td style="border:1px solid #999;padding:4px 7px">0,0 - 2,0</td><td style="border:1px solid #999;padding:4px 7px">-</td></tr>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Швидкість мітральної регургітації</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+<tr><td>dP/dt</td><td><strong>[?]</strong></td><td>мм рт.ст.</td><td>-</td><td>-</td></tr>
+<tr><td>Пік Е</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+<tr><td>Пік А</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+<tr><td>Е/А</td><td><strong>[?]</strong></td><td></td><td>0,0 - 2,0</td><td>-</td></tr>
 </table>
 
 <h3>Праві відділи</h3>
 <p><strong>Правий шлуночок (RVID):</strong> візуально не розширений</p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Стінка правого шлуночка (RVW)</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Ширина правого передсердя у довгій вісі</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Об'єм правого передсердя</td><td><strong>[?]</strong></td><td>мл</td><td>-</td><td>-</td></tr>
+<tr><td>Довжина ПШ в апікальній проекції</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Ширина ПШ в довгій вісі</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>TAPSE</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>TAPSEn</td><td><strong>[?]</strong></td><td>мм/кг</td><td>0,0 - 3,2</td><td>-</td></tr>
+<tr><td>Спадіння каудальної порожнистої вени</td><td><strong>[?]</strong></td><td>%</td><td>-</td><td>-</td></tr>
+</table>
 
 <h3>Тристулковий клапан (Tricuspid valve)</h3>
 <p><strong>Морфологія стулок клапана:</strong> не змінені</p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Швидкість регургітації на клапані (TR)</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+</table>
 
 <h3>Вроджені вади серця</h3>
 <p><strong>ДМШП (VSD):</strong> не виявлено<br><strong>ДМПП (ASD):</strong> не виявлено</p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Швидкість потоку на дефекті</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+</table>
 
 <h3>Оцінка порожнини перикарда</h3>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Товщина перикарда</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+</table>
 <p><strong>Оцінка рідини в перикардіальній порожнині:</strong> рідини не виявлено (норма)</p>
 
 <h3>Оцінка середостіння і паренхіми легень</h3>
-<p><strong>Оцінка середостіння:</strong> новоутворень у середостінні не виявлено</p>
+<p><strong>Оцінка середостіння:</strong> новоутворень у середостінні не виявлено<br><strong>"Вологі легені" у точках:</strong> В-лінії відсутні (норма)</p>
+
+<h3>Оцінка тиску наповнення</h3>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>IVRT</td><td><strong>[?]</strong></td><td>мс</td><td>37,0 - 60,0</td><td>-</td></tr>
+<tr><td>E/IVRT</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>E'</td><td><strong>[?]</strong></td><td>м/с</td><td>-</td><td>-</td></tr>
+<tr><td>Е/Е'</td><td><strong>[?]</strong></td><td></td><td>0,0 - 12,0</td><td>-</td></tr>
+<tr><td>Індекс наповнення/викиду ЛШ (LVEIO)</td><td>-</td><td></td><td>-</td><td>-</td></tr>
+</table>
+
+<h3>Оцінка ступеня легеневої гіпертензії</h3>
+<p><strong>Легенева гіпертензія по формі потоку:</strong> немає ознак легеневої гіпертензії (норма)</p>
+<p><strong>Регургітація на клапані ЛА, м/с:</strong> Ранньодіастолічна [?]; Пізньодіастолічна [?]</p>
+<table class="zt">
+<tr><th>Показник</th><th>Результат</th><th>Одиниця</th><th>Норма</th><th>Відхилення</th></tr>
+<tr><td>Стовбур ЛА у короткій вісі</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>Співвідношення стовбура ЛА/Ао у короткій вісі</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>ПГЛА діастола М-режим</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>ПГЛА систола М-режим</td><td><strong>[?]</strong></td><td>мм</td><td>-</td><td>-</td></tr>
+<tr><td>ПГЛАdn</td><td><strong>[?]</strong></td><td></td><td>-</td><td>-</td></tr>
+<tr><td>Індекс розтяжності ПГЛА</td><td><strong>[?]</strong></td><td>%</td><td>-</td><td>-</td></tr>
+</table>
+<p><strong>Колабування КПВ:</strong> [?]</p>
 
 <p><strong>Заключення:</strong> [сформулюй за фактичними знахідками; норм-варіант — «Камери серця не розширені, стінки міокарду не потовщені. Ознак діастолічної і систолічної дисфункції не виявлено. Клапанний апарат не змінений. Вроджених вад серця не виявлено.»]</p>
 
@@ -1452,6 +1546,21 @@ function stripFences(s) {
   return s.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "");
 }
 
+// Розгортання компактної розмітки таблиць ZOOLUX (<table class="zt">, голі <td>/<th>) у повні
+// inline-стилі. Модель генерує легкий HTML (швидко, без обриву по токенах), а тут детерміновано
+// підставляємо стилі — у фіналі повні inline-стилі (ідеальна вставка у Word). Для інших шаблонів
+// no-op: вони не містять <table class="zt"> чи голих <td>/<th> (там стилі вже inline).
+const ZOO_TABLE = 'border-collapse:collapse;border:1px solid #999;width:100%;margin:0 0 10px';
+const ZOO_TD = 'border:1px solid #999;padding:4px 7px;vertical-align:top';
+const ZOO_TH = 'border:1px solid #999;padding:4px 7px;text-align:left;background:#dce9f5';
+function expandZooTables(html) {
+  if (!html || html.indexOf('class="zt"') === -1) return html;
+  return html
+    .replace(/<table class="zt">/g, `<table style="${ZOO_TABLE}">`)
+    .replace(/<th>/g, `<th style="${ZOO_TH}">`)
+    .replace(/<td>/g, `<td style="${ZOO_TD}">`);
+}
+
 // ── Провайдери формування протоколу (пріоритет: Bedrock → Anthropic API → Max CLI) ──
 // Bedrock (AWS Converse) вмикається наявністю AWS_REGION + кредів; оплата AWS-кредитами.
 // Модель задається BEDROCK_MODEL (за замовч. Amazon Nova Pro — доступна на кредитах одразу;
@@ -1495,12 +1604,16 @@ const ERROR_MESSAGES = {
 // Формування через AWS Bedrock (Converse). Повертає HTML або кидає ProviderError(code).
 async function protocolViaBedrock(systemPrompt, raw, modelId) {
   let r;
+  // Довгі бланки (напр. ветеринарне ЕХО КГ ZOOLUX) не вміщуються у 8000 токенів і обриваються.
+  // Claude (Sonnet/фінал) має велику стелю — даємо запас; Nova лишаємо в її межах.
+  const isClaude = /claude|anthropic/i.test(modelId || BEDROCK_MODEL);
+  const maxTokens = isClaude ? 20000 : 8000;
   try {
     r = await bedrock.send(new ConverseCommand({
       modelId: modelId || BEDROCK_MODEL,
       system: [{ text: systemPrompt }],
       messages: [{ role: "user", content: [{ text: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }] }],
-      inferenceConfig: { maxTokens: 8000, temperature: 0 },
+      inferenceConfig: { maxTokens, temperature: 0 },
     }));
   } catch (e) {
     const name = (e && (e.name || e.__type || "")) + "";
@@ -1511,7 +1624,7 @@ async function protocolViaBedrock(systemPrompt, raw, modelId) {
   const text = ((r.output && r.output.message && r.output.message.content) || [])
     .map((b) => b.text || "").join("").trim();
   if (!text) throw new ProviderError("bedrock_empty");
-  return stripFences(text);
+  return expandZooTables(stripFences(text));
 }
 
 // Формування через Anthropic API (Claude Opus 4.8). Стрімінг — щоб не впертись у таймаут.
@@ -1520,7 +1633,7 @@ async function protocolViaAnthropic(systemPrompt, raw) {
   try {
     const stream = anthropic.messages.stream({
       model: "claude-opus-4-8",
-      max_tokens: 8000,
+      max_tokens: 20000,
       output_config: { effort: "low" },
       system: systemPrompt,
       messages: [{ role: "user", content: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }],
@@ -1531,7 +1644,7 @@ async function protocolViaAnthropic(systemPrompt, raw) {
   }
   const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
   if (!text) throw new ProviderError("anthropic_empty");
-  return stripFences(text);
+  return expandZooTables(stripFences(text));
 }
 
 // Резервний шлях: `claude -p` на підписці Max. Повертає HTML або кидає ProviderError(code).
@@ -1550,7 +1663,7 @@ function protocolViaCLI(systemPrompt, raw) {
         // ліміт Max vs інше — за маркером у stderr; сам stderr НЕ логуємо (може містити текст).
         return reject(new ProviderError(/limit|usage|quota|rate/i.test(err) ? "cli_limit" : "cli_empty"));
       }
-      resolve(stripFences(out));
+      resolve(expandZooTables(stripFences(out)));
     });
     child.stdin.write(prompt);
     child.stdin.end();
