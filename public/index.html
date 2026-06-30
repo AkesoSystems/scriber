@@ -80,7 +80,7 @@
 
   /* ── Поле диктовки: чорний «екран» з білим текстом ── */
   /* ── Хвиля: бари, що рухаються від звуку (замість чорного вікна тексту) ── */
-  .wave{display:flex;align-items:center;justify-content:center;gap:4px;
+  .wave{display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden;
     min-height:150px;padding:26px 24px;background:linear-gradient(180deg,#F4F7FE 0%,#E9F0FD 100%);}
   .wave-bar{width:5px;height:78px;border-radius:6px;
     background:linear-gradient(180deg,#9DB2F4 0%,#6E84E8 100%);
@@ -180,7 +180,10 @@
 
   /* ── Мобільна ── */
   @media(max-width:700px){
-    header{padding:14px 16px;}
+    header{padding:14px 16px;flex-wrap:wrap;row-gap:10px;}
+    .header-right{order:2;}
+    .tmpl-sel{order:3;flex:1 1 100%;max-width:100%;}
+    .panel{min-width:0;}
     .wrap{padding:12px;gap:14px;}
     .screen{min-height:170px;max-height:40vh;padding:16px;word-break:break-word;overflow-wrap:anywhere;}
     .controls{padding:12px;}
