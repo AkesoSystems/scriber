@@ -183,11 +183,18 @@ function dayDiff(aKey, bKey) {
 }
 
 // ── Тестовий період: N днів від ПЕРШОГО протоколу кожного акаунту (логіну Basic Auth) ──
-// База — TRIAL_DAYS (env, дефолт 14). Адмін може коригувати персонально через події у
+// База — TRIAL_DAYS (env, дефолт 7). Адмін може коригувати персонально через події у
 // analytics.jsonl: "trial_reset" (рестарт відліку) і "trial_bonus" (value = +дні). Зберігати
 // оверайди в аналітиці зручно — файл уже на volume, тож вони переживають редеплой без нового маунта.
-const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) > 0 ? Number(process.env.TRIAL_DAYS) : 14;
+const TRIAL_DAYS = Number(process.env.TRIAL_DAYS) > 0 ? Number(process.env.TRIAL_DAYS) : 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Українська відмінкова форма для "день/дні/днів".
+function trialDaysWord(n) {
+  if (n % 10 === 1 && n % 100 !== 11) return "день";
+  if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) return "дні";
+  return "днів";
+}
 
 function readAnalyticsRows() {
   try {
@@ -206,6 +213,10 @@ function appendRowSync(row) {
 
 // Стан тестового періоду логіну з урахуванням адмін-оверайдів.
 function trialState(user, rows) {
+  // Нейтральні QA-акаунти (demo) тестового періоду не мають — доступ безстроковий.
+  if (NEUTRAL_USERS.has(user)) {
+    return { started: false, expired: false, unlimited: true, daysRemaining: null, limitDays: null, bonusDays: 0, firstAt: 0 };
+  }
   rows = rows || readAnalyticsRows();
   // Останній reset для цього юзера «переводить годинник»: ранні протоколи й бонуси не рахуються.
   let resetAt = 0;
@@ -1552,7 +1563,7 @@ app.post("/api/protocol", async (req, res) => {
   if (trial.expired) {
     logEvent(uid, "generate_err", null, user, { stage: "generate", code: "trial_over" });
     return res.status(403).json({
-      error: "Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.",
+      error: "Тестовий період (" + trial.limitDays + " " + trialDaysWord(trial.limitDays) + ") завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.",
       trialExpired: true,
     });
   }

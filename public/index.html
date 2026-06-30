@@ -139,20 +139,15 @@
   #doc table{border-collapse:collapse;width:100%;margin:8px 0 16px;}
   #doc th,#doc td{border:1px solid var(--line);padding:6px 10px;vertical-align:top;}
   .flag{background:var(--amber-soft);color:var(--amber);font-weight:700;padding:0 5px;scroll-margin:90px;}
-  .flag.active{outline:2px solid var(--amber);outline-offset:1px;background:#F6E3B6;}
   .status{padding:14px 20px;font-size:13px;color:var(--muted);min-height:44px;
     border-top:1px solid var(--line);}
   .status.err{color:var(--danger);}
 
-  /* ── Навігація по сумнівних місцях [?] ── */
+  /* ── Лічильник сумнівних місць [?] ── */
   .flagnav{display:none;align-items:center;gap:10px;padding:11px 20px;border-top:1px solid var(--line);
     background:var(--amber-soft);font-size:12.5px;color:var(--amber);flex-wrap:wrap;}
   .flagnav.show{display:flex;}
   .flagnav .fn-count{font-weight:700;}
-  .flagnav button{padding:9px 13px;font-size:11px;background:var(--paper);color:var(--amber);
-    border:1px solid var(--amber-line);margin-left:auto;}
-  .flagnav button+button{margin-left:6px;}
-  .flagnav button:hover{background:var(--amber);color:#fff;border-color:var(--amber);}
 
   /* ── Оцінка якості: маленька модалка ── */
   .modal{display:none;position:fixed;inset:0;z-index:50;background:rgba(12,14,16,.5);
@@ -192,7 +187,6 @@
     .panel-h{flex-wrap:wrap;}
     .doc-actions{width:100%;}
     .doc-actions button{flex:1;min-height:44px;padding:11px 6px;}
-    .flagnav button{min-height:44px;}
     #doc{padding:24px 18px;min-height:300px;}
     .modal .star{font-size:38px;padding:5px 7px;}
   }
@@ -248,8 +242,6 @@
     <div class="flagnav" id="flagNav">
       <span class="fn-count" id="flagCount"></span>
       <span>— перевірте перед збереженням</span>
-      <button id="flagPrev" type="button" aria-label="Попереднє сумнівне місце">↑ Попереднє</button>
-      <button id="flagNext" type="button" aria-label="Наступне сумнівне місце">↓ Наступне [?]</button>
     </div>
     <div class="status" id="status"></div>
   </section>
@@ -301,6 +293,7 @@
   const logoutBtn = document.getElementById("logoutBtn");
   const rateModal = document.getElementById("rateModal");
   let trialExpired = false;
+  let trialLimitDays = 0;    // реальний термін тесту (з /api/trial) — для текстів повідомлень
 
   let finalText = "";        // підтверджений текст (зібраний із сегментів) — іде в протокол
   let liveText = "";         // живий текст поточного запису (накопичені сегменти Whisper)
@@ -429,27 +422,13 @@
     if (audioCtx){ try{ audioCtx.close(); }catch(_){} audioCtx = null; analyser = null; }
   }
 
-  // ── Навігація по сумнівних місцях [?] ──
-  let flagIdx = -1;
+  // ── Лічильник сумнівних місць [?] ──
   function flags(){ return doc.querySelectorAll(".flag"); }
   function showFlagNav(){
     const n = flags().length;
-    flagIdx = -1;
     if (n){ flagCount.textContent = "Сумнівних місць [?]: " + n; flagNav.classList.add("show"); }
     else flagNav.classList.remove("show");
   }
-  function jumpFlag(step){
-    const list = flags();
-    if (!list.length) return;
-    list.forEach(f => f.classList.remove("active"));
-    flagIdx = (flagIdx + step + list.length) % list.length;
-    const el = list[flagIdx];
-    el.classList.add("active");
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
-    flagCount.textContent = "Місце [?] " + (flagIdx + 1) + " з " + list.length;
-  }
-  document.getElementById("flagNext").addEventListener("click", () => jumpFlag(1));
-  document.getElementById("flagPrev").addEventListener("click", () => jumpFlag(-1));
 
   const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
   if (!canRecord) {
@@ -594,7 +573,7 @@
 
   // Формування протоколу: Sonnet → анімований рендер. Викликається авто на стопі ТА кнопкою.
   async function generateProtocol(){
-    if (trialExpired){ setStatus("Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.", true); return; }
+    if (trialExpired){ setStatus(trialOverMsg(), true); return; }
     if (!finalText.trim()){ setStatus("Немає тексту для протоколу — спершу зробіть запис.", true); return; }
     genBtn.disabled = true;
     flagNav.classList.remove("show");
@@ -623,7 +602,7 @@
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
-      loadTrial();                          // перший протокол запускає відлік 14 днів → оновлюємо лічильник
+      loadTrial();                          // перший протокол запускає відлік (TRIAL_DAYS) → оновлюємо лічильник
       setStatus(flagCnt
         ? "Протокол готовий. Перевірте " + flagCnt + " позначених місць [?] перед збереженням."
         : "Протокол готовий. Перегляньте та відредагуйте за потреби.");
@@ -646,9 +625,19 @@
     finalText = t; render(); generateProtocol();
   });
 
-  // ── Тестовий період (14 днів від першого протоколу) ──
+  // ── Тестовий період (TRIAL_DAYS від першого протоколу, термін задає сервер) ──
+  function trialDaysWord(n){
+    return (n % 10 === 1 && n % 100 !== 11) ? "день"
+      : ((n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? "дні" : "днів");
+  }
+  function trialOverMsg(){
+    const term = trialLimitDays ? " (" + trialLimitDays + " " + trialDaysWord(trialLimitDays) + ")" : "";
+    return "Тестовий період" + term + " завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.";
+  }
   function renderTrial(d){
     if (!d) return;
+    if (d.unlimited){ trialEl.hidden = true; return; }   // demo/нейтральні — без тестового періоду
+    if (typeof d.limitDays === "number") trialLimitDays = d.limitDays;
     trialEl.hidden = false;
     if (d.expired){
       trialEl.textContent = "Тест завершено";
@@ -656,16 +645,14 @@
       return;
     }
     const n = d.daysRemaining;
-    const word = (n % 10 === 1 && n % 100 !== 11) ? "день"
-      : ((n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? "дні" : "днів");
-    trialEl.textContent = "Тест: " + n + " " + word;
+    trialEl.textContent = "Тест: " + n + " " + trialDaysWord(n);
     trialEl.className = "trial" + (n <= 3 ? " warn" : "");
   }
   function lockForTrial(){
     trialExpired = true;
     genBtn.disabled = true;
     renderTrial({ expired: true });
-    setStatus("Тестовий період (14 днів) завершився. Зверніться до команди AkesoSystems, щоб продовжити доступ.", true);
+    setStatus(trialOverMsg(), true);
   }
   async function loadTrial(){
     try{
