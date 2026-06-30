@@ -1717,7 +1717,7 @@ const TEMPLATES = {
   vet_zoolux:         { label: "Ветеринарний (ZOOLUX)", prompt: SYSTEM_PROMPT_TESTER5 },
   vet_zoolux_abdomen: { label: "Ветеринарний УЗД ОЧП (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ABDOMEN, blank: VET_ZOOLUX_ABDOMEN_BLANK },
   vet_zoolux_echo:    { label: "Ветеринарний ЕХО КГ (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ECHO, blank: VET_ZOOLUX_ECHO_BLANK },
-  levadna_abdomen:    { label: "Вет ОЧП (собака, самець) — Левадна", prompt: SYSTEM_PROMPT_LEVADNA_ABDOMEN, blank: LEVADNA_ABDOMEN_BLANK },
+  levadna_abdomen:    { label: "Вет ОЧП (собака, самець)", prompt: SYSTEM_PROMPT_LEVADNA_ABDOMEN, blank: LEVADNA_ABDOMEN_BLANK },
   olga_abdomen:    { label: "УЗД ОЧП (формат Ольги)", prompt: SYSTEM_PROMPT_TESTER6 },
   dolhushyna_thyroid: { label: "Щитоподібна залоза (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_THYROID, blank: DOLHUSHYNA_THYROID_BLANK },
   dolhushyna_echo:    { label: "ЕХОКГ (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_ECHO, blank: DOLHUSHYNA_ECHO_BLANK },
