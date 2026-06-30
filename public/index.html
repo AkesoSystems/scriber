@@ -227,7 +227,7 @@
       <span class="timer" id="timer"></span>
     </div>
     <div class="hint">Натисніть «Почати запис» і диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
-      Після «Зупинити» система розпізнає запис; далі натисніть «Сформувати протокол», і Claude його заповнить. Сумнівні місця — <b>[?]</b>, перевірте перед збереженням.</div>
+      Після «Зупинити» система розпізнає запис; далі натисніть «Сформувати протокол», і програма його заповнить. Сумнівні місця — <b>[?]</b>, перевірте перед збереженням.</div>
     <div id="pasteWrap" hidden style="margin-top:10px;display:flex;flex-direction:column;gap:6px">
       <textarea id="pasteBox" rows="4" placeholder="Тестовий акаунт: встав сюди текст диктовки (поганий або ідеальний) і натисни «Згенерувати з тексту»" style="width:100%;font:14px/1.45 inherit;padding:8px;border:1px solid #ccc;border-radius:8px;resize:vertical;box-sizing:border-box"></textarea>
       <button id="pasteGenBtn" class="btn-ghost" style="align-self:flex-start">Згенерувати з тексту</button>
@@ -495,7 +495,7 @@
       if (data.html && !dictationSoFar()){ renderProtocolHtml(data.html); lastSkeletonTmpl = tmpl; }
     }catch(_){}
   }
-  // Рендер фінального протоколу з ефектом «оживання»: блоки з'являються по черзі (видно, як Claude заповнює).
+  // Рендер фінального протоколу з ефектом «оживання»: блоки з'являються по черзі (видно, як програма заповнює).
   function renderProtocolAnimated(html){
     renderProtocolHtml(html);
     const blocks = Array.prototype.slice.call(doc.children);
