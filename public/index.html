@@ -482,6 +482,41 @@
     return "";
   }
 
+  // ── Живе заповнення шаблону ПІД ЧАС диктовки (чернетка) ──
+  // Після кожного розпізнаного чанка з невеликою затримкою шлемо весь текст-досі у
+  // /api/autofill (Nova) і малюємо заповнений шаблон у #doc. Чистовик — Sonnet на стопі.
+  let autofillTimer = null, autofillSeq = 0, autofillBusy = false;
+  function dictationSoFar(){ return (finalText + (finalText && liveText ? " " : "") + liveText).trim(); }
+  function renderProtocolHtml(html){
+    doc.innerHTML = String(html || "").replace(/\[\?\]/g, '<span class="flag">[?]</span>');
+    showFlagNav();
+  }
+  function scheduleAutofill(){
+    if (trialExpired) return;
+    clearTimeout(autofillTimer);
+    autofillTimer = setTimeout(runAutofill, 1500);     // debounce ~1.5 с після останнього чанка
+  }
+  async function runAutofill(){
+    if (autofillBusy){ scheduleAutofill(); return; }   // зайнято — повторимо пізніше
+    const text = dictationSoFar();
+    if (!text || !recording) return;
+    const seq = ++autofillSeq;
+    autofillBusy = true;
+    try{
+      const r = await fetch("/api/autofill", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ text, uid, template: tmplSel.hidden ? undefined : tmplSel.value })
+      });
+      const data = await r.json().catch(() => ({}));
+      // Малюємо лише найсвіжішу відповідь і лише поки триває запис (щоб не затерти фінал Sonnet).
+      if (r.ok && data.html && seq === autofillSeq && recording){
+        renderProtocolHtml(data.html);
+        setStatus("Заповнюю протокол наживо… (чистовик — після «Сформувати протокол»)");
+      }
+    }catch(_){ /* прев'ю best-effort — мовчки ігноруємо */ }
+    finally{ autofillBusy = false; }
+  }
+
   // Живий текст через Groq: пишемо короткими сегментами (~8 с), кожен одразу
   // транскрибуємо й дописуємо. Працює в усіх браузерах (зокрема Safari). Жодних
   // великих файлів — тому нема 413, і довгі обстеження фіналізуються миттєво.
@@ -505,7 +540,7 @@
           fd.append("uid", uid);
           const r = await fetch("/api/transcribe", { method: "POST", body: fd });
           const data = await r.json();
-          if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); saveDraft(); }
+          if (r.ok && data.text){ liveText += (liveText ? " " : "") + data.text.trim(); render(""); saveDraft(); scheduleAutofill(); }
         }catch(_){
           // Сегмент не дійшов (мережа) — НЕ ховаємо тихо: рахуємо й показуємо, щоб лікар передиктував.
           droppedSegs++;
@@ -518,6 +553,8 @@
   }
 
   function finalizeText(){
+    clearTimeout(autofillTimer); autofillSeq++;        // зупиняємо живе прев'ю
+    doc.contentEditable = "true";                      // після стопу протокол знову редагований
     if (micStream){ micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (liveText.trim()) finalText += (finalText ? " " : "") + liveText.trim();
     liveText = "";
@@ -540,6 +577,9 @@
       return;
     }
     liveText = ""; droppedSegs = 0;
+    // Старт нового живого прев'ю: чистимо протокол і блокуємо ручне редагування на час запису
+    // (живе автозаповнення перезаписує #doc; правки — після стопу/«Сформувати»).
+    doc.innerHTML = ""; flagNav.classList.remove("show"); doc.contentEditable = "false"; autofillSeq++;
     startLevel(micStream);                             // живий рівень мікрофона
     startSegment();                                    // перший сегмент
     segTimer = setInterval(() => {                     // кожні ~8 с «зрізаємо» сегмент → onstop його шле + стартує наступний
@@ -616,9 +656,9 @@
       // generate_ok логує СЕРВЕР (з provider/ms). Тут лише показуємо чистий серверний час, якщо є.
       timerEl.textContent = "протокол за " + (ms/1000).toFixed(1).replace(".", ",") + " с"
         + (data.provider ? " · " + data.provider : "");
-      doc.innerHTML = data.html.replace(/\[\?\]/g, '<span class="flag">[?]</span>');
+      doc.contentEditable = "true";          // чистовик редагований
+      renderProtocolHtml(data.html);
       const flagCnt = doc.querySelectorAll(".flag").length;
-      showFlagNav();
       saveDraft();
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік 14 днів → оновлюємо лічильник

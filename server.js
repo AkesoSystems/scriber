@@ -65,6 +65,7 @@ const EV_CODES = new Set([
 ]);
 const EV_MODELS = new Set([
   "us.amazon.nova-pro-v1:0", "amazon.nova-pro-v1:0", "claude-opus-4-8", "claude-cli-max",
+  "us.anthropic.claude-sonnet-4-6",
 ]);
 
 // Захист від необмеженого росту файлу (volume — один файл, тому НЕ rollover, а обрізання
@@ -1261,6 +1262,10 @@ const bedrock = process.env.AWS_REGION
     })
   : null;
 const BEDROCK_MODEL = process.env.BEDROCK_MODEL || "us.amazon.nova-pro-v1:0";
+// Окрема модель для ФІНАЛЬНОГО протоколу (чистовий прохід) — Claude Sonnet 4.6.
+// Живе прев'ю (/api/autofill) лишається на дешевій BEDROCK_MODEL (Nova).
+// Якщо Claude на Bedrock не ввімкнено в акаунті → /api/protocol автоматично відкотиться на Nova.
+const BEDROCK_MODEL_FINAL = process.env.BEDROCK_MODEL_FINAL || "us.anthropic.claude-sonnet-4-6";
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 // Типізована помилка провайдера — несе ЛИШЕ enum-код (без сирих повідомлень → без PHI).
@@ -1285,11 +1290,11 @@ const ERROR_MESSAGES = {
 };
 
 // Формування через AWS Bedrock (Converse). Повертає HTML або кидає ProviderError(code).
-async function protocolViaBedrock(systemPrompt, raw) {
+async function protocolViaBedrock(systemPrompt, raw, modelId) {
   let r;
   try {
     r = await bedrock.send(new ConverseCommand({
-      modelId: BEDROCK_MODEL,
+      modelId: modelId || BEDROCK_MODEL,
       system: [{ text: systemPrompt }],
       messages: [{ role: "user", content: [{ text: "--- СИРИЙ ТЕКСТ ДИКТОВКИ ---\n" + raw }] }],
       inferenceConfig: { maxTokens: 8000, temperature: 0 },
@@ -1349,6 +1354,24 @@ function protocolViaCLI(systemPrompt, raw) {
   });
 }
 
+// Живе прев'ю заповнення шаблону ПІД ЧАС диктовки. Швидка/дешева модель (Nova).
+// Best-effort: НЕ логуємо як generate_ok (щоб не накручувати лічильник протоколів),
+// без ланцюга-резерву — це лише чернетка, чистовик дає /api/protocol (Sonnet) на стопі.
+app.post("/api/autofill", async (req, res) => {
+  if (!bedrock) return res.status(503).json({ error: "no_provider" });
+  const raw = (req.body && req.body.text || "").trim();
+  if (!raw) return res.status(400).json({ error: "empty" });
+  const user = getAuthUser(req);
+  if (trialState(user).expired) return res.status(403).json({ trialExpired: true });
+  const systemPrompt = promptFor(user, req.body && req.body.template);
+  try {
+    const html = await protocolViaBedrock(systemPrompt, raw, BEDROCK_MODEL); // Nova — швидке прев'ю
+    res.json({ html });
+  } catch (e) {
+    res.status(502).json({ error: (e && e.code) || "unknown" });
+  }
+});
+
 app.post("/api/protocol", async (req, res) => {
   const raw = (req.body && req.body.text || "").trim();
   if (!raw) {
@@ -1371,8 +1394,14 @@ app.post("/api/protocol", async (req, res) => {
   const systemPrompt = promptFor(user, req.body && req.body.template);
 
   // Ланцюг провайдерів: основний → резерв. Кожен збій логуємо з кодом; успіх після збою — fallback:true.
+  // Фінальний протокол: спершу Claude Sonnet (якість), якщо нема доступу — відкат на Nova.
   const chain = [];
-  if (bedrock) chain.push({ provider: "bedrock", model: BEDROCK_MODEL, run: protocolViaBedrock });
+  if (bedrock) {
+    chain.push({ provider: "bedrock", model: BEDROCK_MODEL_FINAL, run: (sp, r) => protocolViaBedrock(sp, r, BEDROCK_MODEL_FINAL) });
+    if (BEDROCK_MODEL_FINAL !== BEDROCK_MODEL) {
+      chain.push({ provider: "bedrock", model: BEDROCK_MODEL, run: (sp, r) => protocolViaBedrock(sp, r, BEDROCK_MODEL) });
+    }
+  }
   if (anthropic) chain.push({ provider: "anthropic", model: "claude-opus-4-8", run: protocolViaAnthropic });
   chain.push({ provider: "cli", model: "claude-cli-max", run: protocolViaCLI });
 
