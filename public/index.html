@@ -130,7 +130,8 @@
   .prog.show{height:3px;}
   .prog-bar{display:block;height:100%;width:0;background:var(--teal);transition:width .25s linear;}
   #doc{padding:40px 52px;min-height:540px;outline:none;font-size:15.5px;line-height:1.85;color:var(--body);
-    box-shadow:inset 0 2px 0 var(--teal-soft);}
+    box-shadow:inset 0 2px 0 var(--teal-soft);overflow-wrap:anywhere;overflow-x:auto;}
+  #doc *{max-width:100%;}
   #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст перед копіюванням.";
     color:var(--faint);}
   #doc h2{font-size:20px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 20px;}
