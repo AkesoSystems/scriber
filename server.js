@@ -1767,10 +1767,20 @@ function mayUseTemplate(user, key) {
 
 // Обрати system-промпт: honor-имо запитаний шаблон ЛИШЕ якщо він дозволений юзеру; інакше — залочений
 // первинний (PROMPTS_BY_USER). Це серверна автoритетність: чужий шаблон з клієнта не підставити.
+// Універсальний принцип — додається ПЕРЕД КОЖНИМ промптом (усі протоколи працюють так):
+// шаблон = норма-основа; будь-яка частина лишається (норма) або замінюється диктовкою.
+const TEMPLATE_PRINCIPLE = `ЗАГАЛЬНИЙ ПРИНЦИП (понад усе, діє для будь-якого протоколу нижче): ШАБЛОН — це ОСНОВА, яку показуємо лікарю (норма за замовчуванням або порожній бланк). БУДЬ-ЯКА його частина — слово, число, варіант, ціле речення, цілий орган чи розділ — ЛИШАЄТЬСЯ дослівно, якщо лікар про неї НЕ сказав, і ЗАМІНЮЄТЬСЯ тим, що лікар надиктував, якщо сказав (аж до згортання цілого органа до «<Орган>: не візуалізується / відсутній», коли лікар каже, що орган відсутній/не візуалізується). Шаблон ПОВНІСТЮ редагований диктовкою — у цьому його суть. Нічого не вигадуй понад продиктоване; неназване лишай нормою.
+
+`;
+
 function promptFor(user, requestedTemplate) {
-  if (requestedTemplate && mayUseTemplate(user, requestedTemplate)) return TEMPLATES[requestedTemplate].prompt;
-  const key = PROMPTS_BY_USER[user];
-  return (key && TEMPLATES[key] && TEMPLATES[key].prompt) || SYSTEM_PROMPT;
+  let base;
+  if (requestedTemplate && mayUseTemplate(user, requestedTemplate)) base = TEMPLATES[requestedTemplate].prompt;
+  else {
+    const key = PROMPTS_BY_USER[user];
+    base = (key && TEMPLATES[key] && TEMPLATES[key].prompt) || SYSTEM_PROMPT;
+  }
+  return TEMPLATE_PRINCIPLE + base;
 }
 
 // Які тестери сидять на цьому шаблоні (нік(и)) — для випадайки demo, щоб видно було
