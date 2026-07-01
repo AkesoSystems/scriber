@@ -225,15 +225,30 @@ function trialState(user, rows) {
   for (const r of rows) {
     if (r.user === user && r.event === "trial_reset" && typeof r.t === "number" && r.t > resetAt) resetAt = r.t;
   }
-  let firstAt = 0, bonusDays = 0;
-  for (const r of rows) {
-    if (r.user !== user || typeof r.t !== "number" || r.t < resetAt) continue;
-    if (r.event === "generate_ok" && (!firstAt || r.t < firstAt)) firstAt = r.t;
-    else if (r.event === "trial_bonus" && typeof r.value === "number") bonusDays += r.value;
+  // Події цього юзера після reset — у ХРОНОЛОГІЧНОМУ порядку. Порядок критичний: бонус, що
+  // прийшов уже ПІСЛЯ завершення тріалу, має продовжувати відлік від дня видачі, а не від
+  // давно минулого кінця — інакше «+ дні» лікарю з простроченим періодом візуально нічого
+  // не додає (limitDays росте, але вікно все одно позаду). Кінець тримаємо як timestamp endAt.
+  const mine = rows
+    .filter((r) => r.user === user && typeof r.t === "number" && r.t >= resetAt
+      && (r.event === "generate_ok" || r.event === "trial_bonus"))
+    .sort((a, b) => a.t - b.t);
+  let firstAt = 0, bonusDays = 0, endAt = 0;
+  for (const r of mine) {
+    if (r.event === "generate_ok") {
+      // Перший протокол запускає відлік. Бонуси, видані ДО нього, уже в bonusDays —
+      // тож стартове вікно одразу їх враховує.
+      if (!firstAt) { firstAt = r.t; endAt = firstAt + (TRIAL_DAYS + bonusDays) * DAY_MS; }
+    } else if (r.event === "trial_bonus" && typeof r.value === "number") {
+      bonusDays += r.value;
+      // Після старту продовжуємо від ПІЗНІШОГО з двох: наявний кінець (тріал ще живий) або
+      // момент видачі (уже прострочено) — так лікар завжди отримує повні N днів наперед.
+      if (firstAt) endAt = Math.max(endAt, r.t) + r.value * DAY_MS;
+    }
   }
   const limitDays = Math.max(0, TRIAL_DAYS + bonusDays);
   if (!firstAt) return { started: false, expired: false, daysRemaining: limitDays, limitDays, bonusDays, firstAt: 0 };
-  const remainingMs = limitDays * DAY_MS - (Date.now() - firstAt);
+  const remainingMs = endAt - Date.now();
   return {
     started: true,
     expired: remainingMs <= 0,
@@ -747,7 +762,7 @@ const SYSTEM_PROMPT_VASYL_THYROID = "ВАЖЛИВО: ЗАВЖДИ викорис
 // Відхилення в бланку "-"; висновок — по фактичних знахідках.
 // Статичний бланк вет-ОЧП Левадної (= ШАБЛОН у промпті; тримати синхронно).
 // ───────────── Промпт для test10 (Катерина Кравченко): вет КТ грудної порожнини ─────────────
-// Джерело — Шаблони.pdf (КТ всього тіла); поки лише секція «Грудна порожнина» (найчастіша).
+// Джерело — Шаблони.pdf (КТ всього тіла). Усі секції; грудна порожнина ПЕРШОЮ (за проханням лікаря).
 // Без заголовка й без «Заключення» (узгоджено з лікарем). Бланк = ШАБЛОН (єдине джерело через ${}).
 const KRAVCHENKO_CT_BLANK = `<div style="font-family:'Times New Roman',Georgia,serif;font-size:13px;line-height:1.6;text-align:justify;color:#000">
 <p style="margin:0 0 4px;font-weight:bold">Грудна порожнина</p>
@@ -761,9 +776,85 @@ const KRAVCHENKO_CT_BLANK = `<div style="font-family:'Times New Roman',Georgia,s
 <p style="margin:0 0 5px">Середостіння – не змінене</p>
 <p style="margin:0 0 5px">Стравохід – не змінений</p>
 <p style="margin:0 0 5px">Грудна клітка - не змінена</p>
-<p style="margin:0 0 5px">М'які тканини - не змінені</p>
+<p style="margin:0 0 8px">М'які тканини - не змінені</p>
+<p style="margin:0 0 4px;font-weight:bold">Хребет</p>
+<p style="margin:0 0 4px">Щільність кісткових структур - загальна щільність не змінена</p>
+<p style="margin:0 0 4px">Тіла хребців – не змінені</p>
+<p style="margin:0 0 4px">Дужки хребців - не змінені</p>
+<p style="margin:0 0 4px">Остисті відростки - не змінені</p>
+<p style="margin:0 0 4px">Міжхребцеві диски – не змінені</p>
+<p style="margin:0 0 4px">Спинномозковий канал – не змінений</p>
+<p style="margin:0 0 8px">М'які тканини – не змінені</p>
+<p style="margin:0 0 4px;font-weight:bold">Черевна порожнина</p>
+<p style="margin:0 0 4px">Печінка – не змінена</p>
+<p style="margin:0 0 4px">Жовчний міхур - помірно наповнений, не змінений</p>
+<p style="margin:0 0 4px">Шлунок – не змінений</p>
+<p style="margin:0 0 4px">Кишківник - не змінений</p>
+<p style="margin:0 0 4px">Підшлункова залоза - не змінена</p>
+<p style="margin:0 0 4px">Селезінка - не візуалізується</p>
+<p style="margin:0 0 4px">Судини – не змінені</p>
+<p style="margin:0 0 2px">Нирки:</p>
+<p style="margin:0 0 4px">права - [?] мм, контури рівні, паренхіма не змінена</p>
+<p style="margin:0 0 4px">ліва - [?] мм, контури рівні, паренхіма не змінена</p>
+<p style="margin:0 0 4px">Сечоводи – не змінені</p>
+<p style="margin:0 0 2px">Наднирники:</p>
+<p style="margin:0 0 4px">правий - [?] мм, не збільшений</p>
+<p style="margin:0 0 4px">лівий - не збільшений</p>
+<p style="margin:0 0 4px">Сечовий міхур - помірно наповнений</p>
+<p style="margin:0 0 4px">Яєчники: не візуалізуються</p>
+<p style="margin:0 0 4px">Матка: не візуалізується</p>
+<p style="margin:0 0 4px">Лімфатичні вузли - не змінені</p>
+<p style="margin:0 0 4px">Перитонеальна порожнина – не змінена</p>
+<p style="margin:0 0 8px">Черевна стінка – не змінена</p>
+<p style="margin:0 0 4px;font-weight:bold">Кінцівки грудні</p>
+<p style="margin:0 0 2px">Права грудна кінцівка:</p>
+<p style="margin:0 0 4px">щільність кісткових структур – не змінені</p>
+<p style="margin:0 0 4px">м'які тканини - не змінені</p>
+<p style="margin:0 0 4px">цілісність кісткових структур - не порушена</p>
+<p style="margin:0 0 4px">плечовий суглоб - не змінений</p>
+<p style="margin:0 0 4px">ліктьовий суглоб - не змінений</p>
+<p style="margin:0 0 6px">зап'ястя та п'ясток - не змінені</p>
+<p style="margin:0 0 2px">Ліва грудна кінцівка:</p>
+<p style="margin:0 0 4px">щільність кісткових структур - не змінена</p>
+<p style="margin:0 0 4px">м'які тканини – не змінені</p>
+<p style="margin:0 0 4px">цілісність кісткових структур – не порушена</p>
+<p style="margin:0 0 4px">плечовий суглоб - не змінений</p>
+<p style="margin:0 0 4px">ліктьовий суглоб – не змінений</p>
+<p style="margin:0 0 8px">зап'ястя та п'ясток - не змінені</p>
+<p style="margin:0 0 4px;font-weight:bold">Таз, тазові кінцівки</p>
+<p style="margin:0 0 6px">Таз - щільність кісткової тканини не змінена, м'які тканини не змінені, цілісність не порушена</p>
+<p style="margin:0 0 2px">Права тазова кінцівка:</p>
+<p style="margin:0 0 4px">щільність кісткових структур - не змінена</p>
+<p style="margin:0 0 4px">м'які тканини - не змінені</p>
+<p style="margin:0 0 4px">цілісність кісткових структур – не змінена</p>
+<p style="margin:0 0 4px">кульшовий суглоб - не змінений</p>
+<p style="margin:0 0 4px">колінний суглоб – не змінений</p>
+<p style="margin:0 0 6px">скакальний суглоб - не змінений</p>
+<p style="margin:0 0 2px">Ліва тазова кінцівка:</p>
+<p style="margin:0 0 4px">щільність кісткових структур - не змінена</p>
+<p style="margin:0 0 4px">м'які тканини - не змінені</p>
+<p style="margin:0 0 4px">цілісність кісткових структур - не порушена</p>
+<p style="margin:0 0 4px">кульшовий суглоб - не змінений</p>
+<p style="margin:0 0 4px">колінний суглоб – не змінений</p>
+<p style="margin:0 0 8px">скакальний суглоб - не змінений</p>
+<p style="margin:0 0 4px;font-weight:bold">Голова</p>
+<p style="margin:0 0 4px">Склепіння черепу – не змінене</p>
+<p style="margin:0 0 2px">Ліве вухо:</p>
+<p style="margin:0 0 4px">зовнішнє вухо - не змінене, середнє вухо - не змінене, внутрішнє вухо – не змінене</p>
+<p style="margin:0 0 2px">Праве вухо:</p>
+<p style="margin:0 0 4px">зовнішнє вухо - не змінене, середнє вухо - не змінене, внутрішнє вухо – не змінене</p>
+<p style="margin:0 0 2px">Верхньонижньощелепний суглоб:</p>
+<p style="margin:0 0 4px">правий – не змінений, лівий – не змінений</p>
+<p style="margin:0 0 4px">Носоглотка – не змінена</p>
+<p style="margin:0 0 4px">Носова порожнина – не змінена</p>
+<p style="margin:0 0 4px">Гратчаста кістка – не змінена</p>
+<p style="margin:0 0 4px">Головний мозок – не змінені</p>
+<p style="margin:0 0 4px">Лобні синуси – не змінені</p>
+<p style="margin:0 0 4px">Лімфатичні вузли – не змінені</p>
+<p style="margin:0 0 4px">Щитоподібна залоза – не змінена</p>
+<p style="margin:0 0 4px">Слинні залози – не змінені</p>
 </div>`;
-const SYSTEM_PROMPT_KRAVCHENKO_CT = `Ти — медичний редактор, що оформлює протоколи ветеринарного КТ грудної порожнини українською мовою у форматі лікаря Катерини Кравченко. Готовий протокол має ВИГЛЯДАТИ ТОЧНО як бланк лікаря: та сама структура, ті самі формулювання, ті самі структури в тому ж порядку.
+const SYSTEM_PROMPT_KRAVCHENKO_CT = `Ти — медичний редактор, що оформлює протоколи ветеринарного КТ (усе тіло) українською мовою у форматі лікаря Катерини Кравченко. Готовий протокол має ВИГЛЯДАТИ ТОЧНО як бланк лікаря: та сама структура, ті самі формулювання, ті самі структури в тому ж порядку.
 
 Тобі дають СИРИЙ текст диктовки лікаря (результат розпізнавання мовлення, можливі помилки розпізнавання).
 
@@ -773,7 +864,8 @@ const SYSTEM_PROMPT_KRAVCHENKO_CT = `Ти — медичний редактор,
 3. ПРИВ'ЯЗКА: кожну знахідку прив'язуй до НАЗВАНОЇ структури й сторони (легеня + частка, конкретний лімфовузол, стравохід, плевра тощо). За неоднозначності нічого не оновлюй і не вгадуй.
 4. Патологія перекриває норму: «не змінена / не змінені / не збільшені» → замінюй на продиктоване (вогнище, ущільнення, випіт, збільшення, розширення) ЛИШЕ для названої структури.
 5. Сумнівне/нерозчуте слово познач [?] одразу після нього. ІГНОРУЙ поза-контекст (команди тварині, сторонні розмови й шуми).
-6. БЕЗ «Заключення» — протокол закінчується рядком «М'які тканини». Не додавай жодних підсумкових речень.
+6. БЕЗ «Заключення» — протокол закінчується рядком «Слинні залози». Не додавай жодних підсумкових речень.
+7. Секцій багато (Грудна порожнина, Хребет, Черевна порожнина, Кінцівки грудні, Таз/тазові кінцівки, Голова) — відтвори ВСІ до єдиної, у тому ж порядку; онови лише названі лікарем структури, решту лиши нормою.
 
 ФОРМАТ — ЛИШЕ HTML-фрагмент (без <html>/<head>/<body>, без markdown-обгорток і пояснень). Відтвори бланк ТОЧНО за шаблоном нижче: шрифт Times New Roman, текст вирівняний по ширині, назва секції жирним.
 
@@ -1755,7 +1847,7 @@ const TEMPLATES = {
   vet_zoolux_abdomen: { label: "Ветеринарний УЗД ОЧП (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ABDOMEN, blank: VET_ZOOLUX_ABDOMEN_BLANK },
   vet_zoolux_echo:    { label: "Ветеринарний ЕХО КГ (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ECHO, blank: VET_ZOOLUX_ECHO_BLANK },
   levadna_abdomen:    { label: "Вет ОЧП (собака, самець)", prompt: SYSTEM_PROMPT_LEVADNA_ABDOMEN, blank: LEVADNA_ABDOMEN_BLANK },
-  kravchenko_ct:      { label: "Вет КТ (грудна порожнина)", prompt: SYSTEM_PROMPT_KRAVCHENKO_CT, blank: KRAVCHENKO_CT_BLANK },
+  kravchenko_ct:      { label: "Вет КТ (все тіло)", prompt: SYSTEM_PROMPT_KRAVCHENKO_CT, blank: KRAVCHENKO_CT_BLANK },
   olga_abdomen:    { label: "УЗД ОЧП (формат Ольги)", prompt: SYSTEM_PROMPT_TESTER6 },
   dolhushyna_thyroid: { label: "Щитоподібна залоза (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_THYROID, blank: DOLHUSHYNA_THYROID_BLANK },
   dolhushyna_echo:    { label: "ЕХОКГ (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_ECHO, blank: DOLHUSHYNA_ECHO_BLANK },
@@ -2200,6 +2292,12 @@ app.post("/api/protocol", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`УЗД МВП працює: http://localhost:${PORT}`);
-});
+// Запускаємо сервер лише при прямому виклику (`node server.js`). При require() з тесту
+// сервер не слухає порт — доступні лише чисті функції (trialState тощо) для перевірки.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`УЗД МВП працює: http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app, trialState, TRIAL_DAYS, DAY_MS };
