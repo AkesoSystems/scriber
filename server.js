@@ -213,6 +213,16 @@ function appendRowSync(row) {
   catch (e) { console.error("[analytics] sync append не вдався:", e.message); }
 }
 
+// Квота протоколів (ЛИШЕ відстеження, БЕЗ блокування): логін → базовий пакет протоколів.
+// Показуємо «використано/база» лікарю в апці та в консолі /stats. Відсутній логін = без квоти.
+const PROTOCOL_QUOTA_BY_USER = { test2: 100 };
+function protocolsUsed(user, rows) {
+  rows = rows || readAnalyticsRows();
+  let n = 0;
+  for (const r of rows) if (r.user === user && r.event === "generate_ok") n++;
+  return n;
+}
+
 // Стан тестового періоду логіну з урахуванням адмін-оверайдів.
 function trialState(user, rows) {
   // Нейтральні QA-акаунти (demo) тестового періоду не мають — доступ безстроковий.
@@ -270,7 +280,9 @@ app.get("/api/trial", (req, res) => {
     ? keys.filter((key) => TEMPLATES[key]).map((key) => ({ key, label: TEMPLATES[key].label, testers: testersForTemplate(key) }))
     : null;
   const primary   = PROMPTS_BY_USER[user] || null; // пре-вибір у UI
-  res.json(Object.assign({ user, isNeutral, canPick, templates, primary }, trialState(user)));
+  const quota = PROTOCOL_QUOTA_BY_USER[user];
+  const usage = quota ? { protocolQuota: quota, protocolsUsed: protocolsUsed(user) } : {};
+  res.json(Object.assign({ user, isNeutral, canPick, templates, primary }, trialState(user), usage));
 });
 
 // ── Адмін-керування періодом (за ADMIN_KEY): продовжити (+дні) / скинути ──
@@ -429,6 +441,7 @@ app.get("/api/stats", (req, res) => {
       protocols7d, protocols30d,
       activeDaysStreak: streak,
       protocolsTotal: protocols,
+      protocolQuota: PROTOCOL_QUOTA_BY_USER[user] || null,
       errorRate: (protocols + errors) ? Math.round(errors / (protocols + errors) * 100) : 0,
       avgRating: uu.ratingCount ? Math.round(uu.ratingTotal / uu.ratingCount * 10) / 10 : null,
       trialStarted: ts.started,

@@ -369,6 +369,9 @@ function load(user){
           const dsa = e.daysSinceActive === null ? "—" : e.daysSinceActive;
           const rate = e.avgRating != null ? "★ " + e.avgRating : "—";
           const u = esc(e.user);
+          const quota = (typeof e.protocolQuota === "number")
+            ? ' <span class="' + (e.protocolsTotal >= e.protocolQuota ? "t-over" : "t-ok") + '" title="протоколів використано / база">'
+                + e.protocolsTotal + '/' + e.protocolQuota + '</span>' : '';
           let trial;
           if (!e.trialStarted) trial = '<span class="t-idle">' + e.trialDaysLeft + ' (не почато)</span>';
           else if (e.trialExpired) trial = '<span class="t-over">завершено</span>';
@@ -376,7 +379,7 @@ function load(user){
                  + (e.trialBonusDays ? ' (+' + e.trialBonusDays + ')' : '') + '</span>';
           const ctrl = '<button class="t-btn" onclick="trialAct(\'' + u + '\',\'extend\')" title="Додати довільну кількість днів">+ дні…</button>'
                  + '<button class="t-btn t-reset" onclick="trialAct(\'' + u + '\',\'reset\')">Скинути</button>';
-          return '<tr class="' + cls + '"><td>' + whoLabel(e.user) + "</td><td>" + last +
+          return '<tr class="' + cls + '"><td>' + whoLabel(e.user) + quota + "</td><td>" + last +
                  "</td><td>" + dsa + "</td><td>" + e.protocols7d + "</td><td>" + e.protocols30d +
                  "</td><td>" + e.activeDaysStreak + "</td><td>" + rate + "</td><td>" + e.errorRate + "%</td>" +
                  "<td>" + trial + "</td><td>" + ctrl + "</td></tr>";

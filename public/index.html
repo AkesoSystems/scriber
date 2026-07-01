@@ -608,8 +608,7 @@
       saveGenMs(ms);                       // калібруємо орієнтир під реальний час
       stopProgress(true);
       // generate_ok логує СЕРВЕР (з provider/ms). Тут лише показуємо чистий серверний час, якщо є.
-      timerEl.textContent = "протокол за " + (ms/1000).toFixed(1).replace(".", ",") + " с"
-        + (data.provider ? " · " + data.provider : "");
+      timerEl.textContent = "протокол за " + (ms/1000).toFixed(1).replace(".", ",") + " с · Scriber";
       doc.contentEditable = "true";          // чистовик редагований
       renderProtocolAnimated(data.html);     // ефект «оживання»: блоки з'являються по черзі
       const flagCnt = doc.querySelectorAll(".flag").length;
@@ -652,13 +651,15 @@
     if (d.unlimited){ trialEl.hidden = true; return; }   // demo/нейтральні — без тестового періоду
     if (typeof d.limitDays === "number") trialLimitDays = d.limitDays;
     trialEl.hidden = false;
+    const quota = (typeof d.protocolQuota === "number")
+      ? " · протоколів " + (d.protocolsUsed || 0) + "/" + d.protocolQuota : "";
     if (d.expired){
-      trialEl.textContent = "Тест завершено";
+      trialEl.textContent = "Тест завершено" + quota;
       trialEl.className = "trial over";
       return;
     }
     const n = d.daysRemaining;
-    trialEl.textContent = "Тест: " + n + " " + trialDaysWord(n);
+    trialEl.textContent = "Тест: " + n + " " + trialDaysWord(n) + quota;
     trialEl.className = "trial" + (n <= 3 ? " warn" : "");
   }
   function lockForTrial(){
