@@ -165,7 +165,9 @@
   .modal .stars{display:flex;justify-content:center;gap:5px;}
   .modal .star{font-size:34px;color:#B7CECE;cursor:pointer;background:none;border:none;padding:2px 4px;
     line-height:1;transition:color .12s,transform .12s;}
-  .modal .star:hover,.modal .star.on{color:#D99A2B;}
+  /* Золотими світяться і зафіксовані (.on), і прев'ю при наведенні (.hot) — прев'ю
+     заповнює 1..N кумулятивно через JS, бо CSS :hover підсвітив би лише одну зірку. */
+  .modal .star.on,.modal .star.hot{color:#D99A2B;}
   .modal .star:hover{transform:scale(1.12);}
   .modal .thanks{display:block;margin-top:16px;color:var(--teal-dark);font-weight:700;
     text-transform:uppercase;letter-spacing:.06em;font-size:12px;}
@@ -725,7 +727,7 @@
   function showRating(){ openRate(); }
   function resetRating(){
     rated = false;
-    document.querySelectorAll("#stars .star").forEach((s) => { s.classList.remove("on"); s.style.cursor = "pointer"; });
+    document.querySelectorAll("#stars .star").forEach((s) => { s.classList.remove("on", "hot"); s.style.cursor = "pointer"; });
     const th = rateModal.querySelector(".thanks"); if (th) th.remove();
   }
   document.getElementById("stars").addEventListener("click", (e) => {
@@ -744,6 +746,17 @@
       rateModal.querySelector(".modal-card").appendChild(t);
     }
     setTimeout(closeRate, 1400);
+  });
+  // Прев'ю при наведенні: підсвічуємо ВСІ зірки до тієї, над якою курсор (1..N), а не лише
+  // одну — інакше лікар не бачить, на скільки ставить (виглядає як «завжди одна зірка»).
+  const starsWrap = document.getElementById("stars");
+  starsWrap.addEventListener("mouseover", (e) => {
+    const v = Number(e.target.dataset && e.target.dataset.v);
+    if (!v || rated) return;
+    document.querySelectorAll("#stars .star").forEach((s) => s.classList.toggle("hot", Number(s.dataset.v) <= v));
+  });
+  starsWrap.addEventListener("mouseleave", () => {
+    document.querySelectorAll("#stars .star").forEach((s) => s.classList.remove("hot"));
   });
   document.getElementById("rateClose").addEventListener("click", closeRate);
   rateModal.addEventListener("click", (e) => { if (e.target === rateModal) closeRate(); });
