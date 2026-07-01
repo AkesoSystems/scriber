@@ -648,18 +648,26 @@
   }
   function renderTrial(d){
     if (!d) return;
-    if (d.unlimited){ trialEl.hidden = true; return; }   // demo/нейтральні — без тестового періоду
+    const q = (typeof d.protocolQuota === "number")
+      ? "протоколів " + (d.protocolsUsed || 0) + "/" + d.protocolQuota : "";
+    if (d.unlimited){
+      // demo — без бейджа; квота-клієнт (напр. test2) — лише лічильник протоколів, БЕЗ тесту в днях
+      if (!q){ trialEl.hidden = true; return; }
+      trialEl.hidden = false;
+      trialEl.textContent = q;
+      trialEl.className = "trial" + (d.protocolsUsed >= d.protocolQuota ? " warn" : "");
+      return;
+    }
     if (typeof d.limitDays === "number") trialLimitDays = d.limitDays;
     trialEl.hidden = false;
-    const quota = (typeof d.protocolQuota === "number")
-      ? " · протоколів " + (d.protocolsUsed || 0) + "/" + d.protocolQuota : "";
+    const suffix = q ? " · " + q : "";
     if (d.expired){
-      trialEl.textContent = "Тест завершено" + quota;
+      trialEl.textContent = "Тест завершено" + suffix;
       trialEl.className = "trial over";
       return;
     }
     const n = d.daysRemaining;
-    trialEl.textContent = "Тест: " + n + " " + trialDaysWord(n) + quota;
+    trialEl.textContent = "Тест: " + n + " " + trialDaysWord(n) + suffix;
     trialEl.className = "trial" + (n <= 3 ? " warn" : "");
   }
   function lockForTrial(){

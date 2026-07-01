@@ -218,15 +218,20 @@ function appendRowSync(row) {
 const PROTOCOL_QUOTA_BY_USER = { test2: 100 };
 function protocolsUsed(user, rows) {
   rows = rows || readAnalyticsRows();
+  // «Обнулення» (адмін-подія quota_reset) переводить лічильник: рахуємо лише generate_ok ПІСЛЯ
+  // останнього reset. Історичні протоколи лишаються в аналітиці, але в квоту не входять.
+  let resetAt = 0;
+  for (const r of rows) if (r.user === user && r.event === "quota_reset" && typeof r.t === "number" && r.t > resetAt) resetAt = r.t;
   let n = 0;
-  for (const r of rows) if (r.user === user && r.event === "generate_ok") n++;
+  for (const r of rows) if (r.user === user && r.event === "generate_ok" && (r.t || 0) >= resetAt) n++;
   return n;
 }
 
 // Стан тестового періоду логіну з урахуванням адмін-оверайдів.
 function trialState(user, rows) {
-  // Нейтральні QA-акаунти (demo) тестового періоду не мають — доступ безстроковий.
-  if (NEUTRAL_USERS.has(user)) {
+  // demo — безстроково. Квота-клієнти (PROTOCOL_QUOTA_BY_USER, напр. test2) — теж без тесту-в-днях:
+  // у них інша модель (лічильник протоколів), тож trial-відлік/гейт до них не застосовуємо.
+  if (NEUTRAL_USERS.has(user) || PROTOCOL_QUOTA_BY_USER[user]) {
     return { started: false, expired: false, unlimited: true, daysRemaining: null, limitDays: null, bonusDays: 0, firstAt: 0 };
   }
   rows = rows || readAnalyticsRows();
@@ -299,6 +304,8 @@ app.post("/api/admin/trial", (req, res) => {
     appendRowSync({ t: Date.now(), uid: "admin", user, event: "trial_bonus", value: days });
   } else if (action === "reset") {
     appendRowSync({ t: Date.now(), uid: "admin", user, event: "trial_reset", value: null });
+  } else if (action === "quota_reset") {
+    appendRowSync({ t: Date.now(), uid: "admin", user, event: "quota_reset", value: null });
   } else {
     return res.status(400).json({ error: "bad_action" });
   }
@@ -376,7 +383,7 @@ app.get("/api/stats", (req, res) => {
 
   for (const r of rows) {
     // Адмін-оверайди періоду — службові рядки; у статистику не йдуть (їх читає trialState).
-    if (r.event === "trial_bonus" || r.event === "trial_reset") continue;
+    if (r.event === "trial_bonus" || r.event === "trial_reset" || r.event === "quota_reset") continue;
     uniq.add(r.uid);
     const d = dayKey(r.t);
     days[d] = days[d] || { visits: 0, recordings: 0, protocols: 0, exports: 0 };
@@ -442,6 +449,8 @@ app.get("/api/stats", (req, res) => {
       activeDaysStreak: streak,
       protocolsTotal: protocols,
       protocolQuota: PROTOCOL_QUOTA_BY_USER[user] || null,
+      protocolsUsedQuota: PROTOCOL_QUOTA_BY_USER[user] ? protocolsUsed(user, rows) : null,
+      trialUnlimited: ts.unlimited || false,
       errorRate: (protocols + errors) ? Math.round(errors / (protocols + errors) * 100) : 0,
       avgRating: uu.ratingCount ? Math.round(uu.ratingTotal / uu.ratingCount * 10) / 10 : null,
       trialStarted: ts.started,
