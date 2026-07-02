@@ -979,6 +979,52 @@ const SYSTEM_PROMPT_KRAVCHENKO_CT = `Ти — медичний редактор,
 ${KRAVCHENKO_CT_BLANK}
 
 Нічого, крім цього HTML, не виводь.`;
+// ── OVRU / Кравченко: РГ грудної порожнини (брендований) ──
+// Бланк = ЛИШЕ вміст опису (Times); фірмову рамку OVRU (хедер/футер/печатка/підпис/дисклеймер) +
+// вставку знімків накладає КЛІЄНТ (BRAND_PROFILES.kravchenko_thorax у index.html). LLM бренд не бачить.
+// Норма легень «не змінена» — з її ж kravchenko_ct (не вигадана). Заключення-норма «Патологічних змін не виявлено».
+const KRAVCHENKO_THORAX_BLANK = `<div style="font-family:'Times New Roman',Georgia,serif;font-size:14pt;line-height:1.5;text-align:left;color:#000">
+<p style="margin:0 0 12px"><b>Дата:</b> </p>
+<p style="margin:0 0 12px"><b>Анамнестичні дані:</b> </p>
+<p style="margin:0 0 12px"><b>Пацієнт:</b> </p>
+<p style="margin:0 0 12px"><b>Власник:</b> </p>
+<p style="margin:0 0 12px"><b>Вид дослідження:</b> Рентгенографія грудної порожнини в 2х ортогональних проекціях</p>
+<p style="margin:12px 0 8px;font-weight:bold">Опис:</p>
+<p style="margin:0 0 7px">Глотка та гортань - не візуалізується</p>
+<p style="margin:0 0 7px">Паренхіма легень – не змінена</p>
+<p style="margin:0 0 7px">Трахея - не зміщена, порожнина не змінена</p>
+<p style="margin:0 0 7px">Бронхи - головні і дольові, порожнина не змінена, не зміщені</p>
+<p style="margin:0 0 7px">Плевральна порожнина – не змінена</p>
+<p style="margin:0 0 7px">Перибронхіальні лімфатичні вузли - не візуалізуються</p>
+<p style="margin:0 0 7px">Стернальні лімфатичні вузли - не візуалізуються</p>
+<p style="margin:0 0 7px">Середостіння – не змінене</p>
+<p style="margin:0 0 7px">Серце і судини - форма не змінена, об'єм не змінений, змін дольових і головних судин не виявлено</p>
+<p style="margin:0 0 7px">Стравохід – не змінений</p>
+<p style="margin:0 0 7px">Грудна клітка - не змінена</p>
+<p style="margin:0 0 7px">М'які тканини - не змінені</p>
+<p style="margin:12px 0 6px;font-weight:bold">Заключення:</p>
+<p style="margin:0 0 7px">Патологічних змін не виявлено</p>
+<p style="margin:12px 0 6px;font-weight:bold">Рекомендовано:</p>
+<p style="margin:0 0 7px"></p>
+</div>`;
+const SYSTEM_PROMPT_KRAVCHENKO_THORAX = `Ти — медичний редактор, що оформлює протоколи ветеринарної рентгенографії грудної порожнини українською у форматі лікаря Катерини Кравченко (OVRU). Готовий протокол має ВИГЛЯДАТИ ТОЧНО як бланк: та сама структура, ті самі формулювання, той самий порядок.
+
+Тобі дають СИРИЙ текст диктовки лікаря (розпізнавання мовлення, можливі помилки).
+
+ПРАВИЛА:
+1. Шаблон нижче — НОРМА за замовчуванням. Рядок не згадано → лиши ДОСЛІВНО; сказано інше → ЗАМІНИ на продиктоване (аж до «не візуалізується»). Нічого не вигадуй понад продиктоване.
+2. Поля пацієнта (Дата, Анамнестичні дані, Пацієнт, Власник) лиши ПОРОЖНІМИ після двокрапки, ЯКЩО лікар їх не продиктував; «Вид дослідження» лиши як у шаблоні, якщо не сказано інше.
+3. РОЗМІРИ/числа: нормалізуй («сім міліметрів» → 7 мм, «нуль кома п'ять» → 0,5; десятковий роздільник — КОМА). Не названо — не вигадуй.
+4. ПРИВ'ЯЗКА: кожну знахідку — до названої структури/сторони (легеня + частка, конкретний лімфовузол, плевра, стравохід, серце тощо). Неоднозначно → не оновлюй і не вгадуй.
+5. Патологія перекриває норму ЛИШЕ для названої структури (потовщення стінок, інтерстиційний/альвеолярний тип, інфільтрація, випіт, зміщення, новоутворення тощо).
+6. Сумнівне/нерозчуте слово познач [?] одразу після нього. ІГНОРУЙ поза-контекст (команди тварині, сторонні репліки, шум).
+7. «Заключення»: якщо лікар назвав висновки — заміни норм-рядок на них (переліком, кожен з нового рядка); якщо про висновок не сказано — лиши «Патологічних змін не виявлено». «Рекомендовано»: заповни лише якщо продиктовано, інакше лиши порожнім.
+
+ФОРМАТ — ЛИШЕ HTML-фрагмент (без <html>/<head>/<body>, без markdown-обгорток і пояснень). Times New Roman, вирівнювання зліва, лейбли й назви секцій жирним. Відтвори шаблон ДОСЛІВНО (оновлюй лише продиктоване):
+
+${KRAVCHENKO_THORAX_BLANK}
+
+Нічого, крім цього HTML, не виводь.`;
 const LEVADNA_ABDOMEN_BLANK = `<div style="font-family:'Times New Roman',Georgia,serif;font-size:13px;line-height:1.5;text-align:justify;color:#000">
 <p style="text-align:center;margin:0 0 10px;font-weight:bold">ЕКСПЕРТНЕ ДЕТАЛІЗОВАНЕ УЛЬТРАЗВУКОВЕ ДОСЛІДЖЕННЯ ЧЕРЕВНОЇ ПОРОЖНИНИ</p>
 <p style="margin:0 0 5px">Вільна рідина у черевній порожнині: не візуалізується.</p>
@@ -1953,6 +1999,7 @@ const TEMPLATES = {
   vet_zoolux_echo:    { label: "Ветеринарний ЕХО КГ (ZOOLUX)", prompt: SYSTEM_PROMPT_VET_ZOOLUX_ECHO, blank: VET_ZOOLUX_ECHO_BLANK },
   levadna_abdomen:    { label: "Вет ОЧП (собака, самець)", prompt: SYSTEM_PROMPT_LEVADNA_ABDOMEN, blank: LEVADNA_ABDOMEN_BLANK },
   kravchenko_ct:      { label: "Вет КТ (все тіло)", prompt: SYSTEM_PROMPT_KRAVCHENKO_CT, blank: KRAVCHENKO_CT_BLANK },
+  kravchenko_thorax:  { label: "РГ грудної порожнини (OVRU)", prompt: SYSTEM_PROMPT_KRAVCHENKO_THORAX, blank: KRAVCHENKO_THORAX_BLANK, brand: "ovru" },
   olga_abdomen:    { label: "УЗД ОЧП (формат Ольги)", prompt: SYSTEM_PROMPT_TESTER6 },
   dolhushyna_thyroid: { label: "Щитоподібна залоза (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_THYROID, blank: DOLHUSHYNA_THYROID_BLANK },
   dolhushyna_echo:    { label: "ЕХОКГ (Долгушина)", prompt: SYSTEM_PROMPT_DOLHUSHYNA_ECHO, blank: DOLHUSHYNA_ECHO_BLANK },
@@ -1970,7 +2017,7 @@ const PROMPTS_BY_USER = {
   test3: "peds_echo",       // дитяча ехокардіографія
   test5: "vet_zoolux_abdomen", // дефолт — УЗД ОЧП; ЕХО КГ обирається в пікері
   test9: "levadna_abdomen",  // вет ОЧП собака-самець (Ірина Левадна)
-  test10: "kravchenko_ct",   // вет КТ грудної порожнини (Катерина Кравченко)
+  test10: "kravchenko_thorax",   // дефолт — РГ грудної (OVRU, брендований); КТ у пікері (Катерина Кравченко)
   test6: "olga_abdomen",    // Ольга Дебель — УЗД ОЧП (формат Ольги)
   test7: "dolhushyna_thyroid", // Долгушина Альбіна — дефолт ЩЗ (може перемкнути на ЕХОКГ, див. нижче)
   test8: "denysiuk_venous",    // Денисюк Роксоляна — доплерографія вен нижніх кінцівок
@@ -1986,7 +2033,7 @@ const TEMPLATE_CHOICES_BY_USER = {
   test3: ["peds_echo"],                              // Шипов: дитяча ехокардіографія (поки один формат)
   test5: ["vet_zoolux_abdomen", "vet_zoolux_echo"],  // ZOOLUX (вет): ОЧП або ЕХО КГ на вибір
   test9: ["levadna_abdomen"],              // Левадна (вет ОЧП): один формат
-  test10: ["kravchenko_ct"],               // Кравченко (вет КТ грудна): один формат
+  test10: ["kravchenko_thorax", "kravchenko_ct"], // Кравченко: РГ грудної (OVRU) або КТ на вибір
   test6: ["olga_abdomen"],                           // Ольга Дебель: УЗД ОЧП (один формат)
   test7: ["dolhushyna_thyroid", "dolhushyna_echo"],  // Долгушина: ЩЗ або ЕХОКГ на вибір
   test8: ["denysiuk_venous"],                        // Денисюк: доплерографія вен (один формат)
