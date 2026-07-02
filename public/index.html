@@ -188,8 +188,8 @@
   .branded-doc .bd-body{padding:4mm 19mm 2mm 30mm;}
   .branded-doc .bd-body p{margin:0 0 7px;}
   .branded-doc .bd-body b{font-weight:700;}
-  /* полотно знімків — межа перетягування (знімки НЕ заходять у зону підпису) */
-  .branded-doc .bd-canvas{position:relative;min-height:70mm;margin:2mm 19mm 2mm 30mm;}
+  /* полотно знімків — межа перетягування; ПОРОЖНЄ = 0 висоти (не штовхає підпис на нову сторінку) */
+  .branded-doc .bd-canvas{position:relative;min-height:0;margin:0 19mm;}
   .branded-doc .bd-img{position:absolute;width:52%;cursor:move;touch-action:none;outline:1px dashed transparent;}
   .branded-doc .bd-img:hover{outline-color:#cdbcf0;}
   .branded-doc .bd-img img{display:block;width:100%;height:auto;border:1px solid #ddd;pointer-events:none;}
@@ -216,7 +216,20 @@
     .branded-doc .bd-ftr{position:fixed;bottom:0;left:0;right:0;}
     .branded-doc .bd-body{padding-top:34mm;}
     .branded-doc .bd-img{break-inside:avoid;}
+    /* блок підпису+дисклеймер не розривати між сторінками */
+    .branded-doc .bd-signrow,.branded-doc .bd-disc{break-inside:avoid;}
+    .branded-doc .bd-disc{break-before:avoid;}
   }
+
+  /* Перегляд по сторінках (модалка з окремими A4-аркушами) */
+  #pageModal{align-items:flex-start;overflow:auto;padding:56px 12px 24px;background:rgba(12,14,16,.62);}
+  #pageModal .pg-wrap{margin:0 auto;}
+  #pageModal .pg-close{position:fixed;top:14px;right:18px;z-index:60;background:#fff;color:var(--ink);
+    border:1px solid var(--line);border-radius:0;padding:9px 16px;font-size:12px;font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;cursor:pointer;}
+  .bd-page{display:flex;flex-direction:column;height:297mm;overflow:hidden;background:#fff;
+    margin:0 auto 18px;box-shadow:0 10px 34px rgba(0,0,0,.45);}
+  .bd-page .bd-ftr{margin-top:auto;}
 
   /* ── Мобільна ── */
   @media(max-width:700px){
@@ -284,6 +297,7 @@
       <span>Протокол · можна редагувати</span>
       <span class="doc-actions">
         <button id="imgBtn" class="btn-ghost" hidden title="Додати рентген-знімок">+ Знімок</button>
+        <button id="pageBtn" class="btn-ghost" hidden title="Перегляд по сторінках (A4)">Сторінки</button>
         <button id="copyBtn" class="btn-ghost">Копіювати</button>
         <button id="docBtn" class="btn-ghost">Word</button>
         <button id="pdfBtn" class="btn-ghost">PDF</button>
@@ -309,6 +323,11 @@
       <button class="star" data-v="1" aria-label="1 з 5">★</button><button class="star" data-v="2" aria-label="2 з 5">★</button><button class="star" data-v="3" aria-label="3 з 5">★</button><button class="star" data-v="4" aria-label="4 з 5">★</button><button class="star" data-v="5" aria-label="5 з 5">★</button>
     </div>
   </div>
+</div>
+
+<div class="modal" id="pageModal" aria-hidden="true">
+  <button class="pg-close" id="pgClose" type="button">Закрити ✕</button>
+  <div class="pg-wrap" id="pgWrap"></div>
 </div>
 
 <script>
@@ -554,8 +573,10 @@
   // полотно РОСТЕ під найнижчий знімок → підпис/футер завжди нижче (знімок не налазить на підпис)
   function reflowCanvas(){
     const c = bdCanvas(); if (!c) return;
-    let maxB = 0; c.querySelectorAll(".bd-img").forEach(el => { maxB = Math.max(maxB, el.offsetTop + el.offsetHeight); });
-    c.style.height = Math.max(264, maxB + 14) + "px";   // ≥~70mm
+    const imgs = c.querySelectorAll(".bd-img");
+    if (!imgs.length){ c.style.height = "0px"; return; }   // порожнє полотно = 0 (підпис не з'їжджає на 2-гу стор.)
+    let maxB = 0; imgs.forEach(el => { maxB = Math.max(maxB, el.offsetTop + el.offsetHeight); });
+    c.style.height = (maxB + 14) + "px";                   // росте під знімки → підпис завжди нижче
   }
   function addBrandedImage(src){
     const canvas = bdCanvas(); if (!canvas) return;
@@ -580,7 +601,73 @@
     imgBtn.addEventListener("click", () => imgFile.click());
     imgFile.addEventListener("change", () => { Array.from(imgFile.files).forEach(f => { const r = new FileReader(); r.onload = () => addBrandedImage(r.result); r.readAsDataURL(f); }); imgFile.value = ""; });
   }
-  function updateBrandUI(){ if (imgBtn) imgBtn.hidden = !brandOf(); }
+  const pageBtn = document.getElementById("pageBtn");
+  const pageModal = document.getElementById("pageModal");
+  const pgWrap = document.getElementById("pgWrap");
+  const pgClose = document.getElementById("pgClose");
+  function updateBrandUI(){ const on = !!brandOf(); if (imgBtn) imgBtn.hidden = !on; if (pageBtn) pageBtn.hidden = !on; }
+
+  // ── Перегляд по сторінках: розбиває брендований протокол на окремі A4-аркуші (з бренд-рамкою на кожному) ──
+  const PXMM = 96 / 25.4;
+  function paginate(bd, p){
+    const usable = (297 - 32 - 11 - 6) * PXMM;   // A4 мінус хедер(≈32мм) мінус футер(≈11мм) мінус запас
+    const bodyInner = bd.querySelector(".bd-body") ? bd.querySelector(".bd-body").firstElementChild : null;
+    const paras = bodyInner ? Array.from(bodyInner.children) : [];
+    const canvas = bd.querySelector(".bd-canvas");
+    const hasImgs = canvas && canvas.querySelectorAll(".bd-img").length;
+    const signrow = bd.querySelector(".bd-signrow"), disc = bd.querySelector(".bd-disc");
+    const meas = document.createElement("div");
+    meas.style.cssText = "position:absolute;left:-9999px;top:0;width:161mm;font-family:'Times New Roman',serif;font-size:14pt;line-height:1.5;";
+    document.body.appendChild(meas);
+    const H = node => { meas.innerHTML = ""; const c = node.cloneNode(true); meas.appendChild(c); return c.offsetHeight; };
+    const flow = paras.map(n => ({ type:"p", node:n }));
+    if (hasImgs) flow.push({ type:"canvas", node:canvas });
+    const sigGroup = document.createElement("div");
+    if (signrow) sigGroup.appendChild(signrow.cloneNode(true));
+    if (disc) sigGroup.appendChild(disc.cloneNode(true));
+    flow.push({ type:"sig", node:sigGroup });
+    const pagesItems = []; let cur = [], curH = 0;
+    for (const it of flow){
+      const ih = H(it.node) + 8;
+      if (curH + ih > usable && cur.length){ pagesItems.push(cur); cur = []; curH = 0; }
+      cur.push(it); curH += ih;
+    }
+    if (cur.length) pagesItems.push(cur);
+    document.body.removeChild(meas);
+    return pagesItems.map(items => {
+      const pg = document.createElement("div"); pg.className = "branded-doc bd-page";
+      pg.innerHTML = '<img class="bd-hdr" src="' + p.header + '">';
+      const inner = document.createElement("div");
+      inner.style.cssText = "font-family:'Times New Roman',Georgia,serif;font-size:14pt;line-height:1.5;text-align:left;color:#000";
+      let hasP = false;
+      items.forEach(it => { if (it.type === "p"){ inner.appendChild(it.node.cloneNode(true)); hasP = true; } });
+      if (hasP){ const body = document.createElement("div"); body.className = "bd-body"; body.appendChild(inner); pg.appendChild(body); }
+      items.forEach(it => {
+        if (it.type === "canvas"){ const c = it.node.cloneNode(true); c.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove()); pg.appendChild(c); }
+        else if (it.type === "sig"){ Array.from(it.node.childNodes).forEach(n => pg.appendChild(n.cloneNode(true))); }
+      });
+      pg.insertAdjacentHTML("beforeend", '<img class="bd-ftr" src="' + p.footer + '">');
+      return pg;
+    });
+  }
+  function openPagePreview(){
+    const bd = doc.querySelector(".branded-doc"), p = brandOf();
+    if (!bd || !p) return;
+    pgWrap.innerHTML = "";
+    let pages = null;
+    try { pages = paginate(bd, p); } catch(_){ pages = null; }
+    if (!pages || !pages.length){                      // запасний варіант — один аркуш
+      const pg = bd.cloneNode(true); pg.classList.add("bd-page");
+      pg.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove());
+      pg.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
+      pgWrap.appendChild(pg);
+    } else { pages.forEach(pg => pgWrap.appendChild(pg)); }
+    pageModal.classList.add("show"); pageModal.setAttribute("aria-hidden", "false");
+  }
+  function closePagePreview(){ pageModal.classList.remove("show"); pageModal.setAttribute("aria-hidden", "true"); pgWrap.innerHTML = ""; }
+  if (pageBtn) pageBtn.addEventListener("click", openPagePreview);
+  if (pgClose) pgClose.addEventListener("click", closePagePreview);
+  if (pageModal) pageModal.addEventListener("click", e => { if (e.target === pageModal) closePagePreview(); });
 
   function renderProtocolHtml(html){
     const inner = String(html || "").replace(/\[\?\]/g, '<span class="flag">[?]</span>');
