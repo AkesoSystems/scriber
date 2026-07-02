@@ -111,17 +111,15 @@
     <span class="dot2 amber"></span>3+ дн тиші <span class="dot2 red"></span>7+ дн.
     «Серія днів» — скільки днів поспіль робив протоколи. «Днів тиша» — скільки днів від останнього протоколу.</p>
   <table id="engTable">
-    <thead><tr><th>Лікар</th><th>Останній протокол</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th><th>Тест (днів)</th><th>Керування</th></tr></thead>
+    <thead><tr><th>Лікар</th><th>Останній протокол</th><th>Днів тиша</th><th>Протоколів 7д</th><th>Протоколів 30д</th><th>Серія днів</th><th>Оцінка</th><th>% помилок</th><th title="copy/pdf/word за 7 днів — чи виносить готовий протокол з апки">Вихід 7д</th><th>Тест (днів)</th><th>Керування</th></tr></thead>
     <tbody id="engBody"></tbody>
   </table>
 
   <h2>Чому падало створення протоколу</h2>
-  <p class="hint">Збої згруповані за кодом помилки, провайдером (Bedrock/Claude API/CLE) і стадією (генерація чи транскрипція). Якщо тут густо — дивись який саме шар підводить.</p>
+  <p class="hint">Збої згруповані за кодом помилки і стадією (генерація чи транскрипція). Якщо тут густо — дивись який саме шар підводить.</p>
   <p class="legend" id="errHead"></p>
   <div class="legend" style="margin-top:10px">За кодом помилки</div>
   <div id="errByCode" class="minibars"></div>
-  <div class="legend" style="margin-top:14px">За провайдером</div>
-  <div id="errByProvider" class="minibars"></div>
   <div class="legend" style="margin-top:14px">За стадією</div>
   <div id="errByStage" class="minibars"></div>
 
@@ -316,10 +314,10 @@ function load(user){
       : "оцінок ще немає";
 
     const totalExp = d.exports.word + d.exports.pdf + d.exports.copy;
+    const recSub = "середня тривалість: " + fmtSec(d.avgRecordingSec) +
+      (d.recordingsTrimmed ? " · без " + d.recordingsTrimmed + " фальстартів/привидів" : "");
     const cards = [
-      ["Візити", d.visits, "відкриттів сторінки"],
-      ["Унікальні пристрої", d.uniqueDevices, "різних браузерів/телефонів"],
-      ["Записів диктовки", d.recordings, "середня тривалість: " + fmtSec(d.avgRecordingSec)],
+      ["Записів диктовки", d.recordings, recSub],
       ["Протоколів сформовано", d.protocolsGenerated, "середній час генерації: " + fmtSec(d.avgGenerateSec)],
       ["Оцінка якості", rating, ratingSub],
       ["Помилок генерації", d.generateErrors, d.generateErrors ? "розбивка за кодом нижче ↓" : "усе чисто"],
@@ -382,12 +380,19 @@ function load(user){
           const ctrl = '<button class="t-btn" onclick="trialAct(\'' + u + '\',\'extend\')" title="Додати довільну кількість днів">+ дні…</button>'
                  + '<button class="t-btn t-reset" onclick="trialAct(\'' + u + '\',\'reset\')">Скинути</button>'
                  + (typeof e.protocolQuota === "number" ? '<button class="t-btn t-reset" onclick="trialAct(\'' + u + '\',\'quota_reset\')" title="Обнулити лічильник протоколів">Обнулити прот.</button>' : '');
+          const ex7 = e.exports7d || { word: 0, pdf: 0, copy: 0 };
+          const outN = ex7.word + ex7.pdf + ex7.copy;
+          // Червоний прапор: робив протоколи, але НІЧОГО не виніс (copy/pdf/word) за 7д — генерує,
+          // та не бере вихід у роботу → головний привід написати. copy = повноцінний вихід (вставка в EMR).
+          const outCell = (e.protocols7d > 0 && outN === 0)
+            ? '<span class="t-over" title="' + e.protocols7d + ' протоколів за 7д, 0 виносу — спитати чому">⚠ 0</span>'
+            : (outN ? '<span title="копі / pdf / word за 7 днів">' + ex7.copy + '/' + ex7.pdf + '/' + ex7.word + '</span>' : '—');
           return '<tr class="' + cls + '"><td>' + whoLabel(e.user) + quota + "</td><td>" + last +
                  "</td><td>" + dsa + "</td><td>" + e.protocols7d + "</td><td>" + e.protocols30d +
                  "</td><td>" + e.activeDaysStreak + "</td><td>" + rate + "</td><td>" + e.errorRate + "%</td>" +
-                 "<td>" + trial + "</td><td>" + ctrl + "</td></tr>";
+                 "<td>" + outCell + "</td><td>" + trial + "</td><td>" + ctrl + "</td></tr>";
         }).join("")
-      : '<tr><td colspan="10" style="color:#9AA7AE">Даних ще немає.</td></tr>';
+      : '<tr><td colspan="11" style="color:#9AA7AE">Даних ще немає.</td></tr>';
 
     // Per-user drilldown: динаміка по днях + журнал кожного запису саме цього лікаря.
     // Показуємо лише коли обрано конкретного користувача (інакше дані не приходять / завеликі).
@@ -438,7 +443,6 @@ function load(user){
         : '<div class="legend" style="color:#9AA7AE">— немає</div>';
     }
     errBars(errs.byCode, "errByCode", CODE_LABELS);
-    errBars(errs.byProvider, "errByProvider", PROVIDER_LABELS);
     errBars(errs.byStage, "errByStage", STAGE_LABELS);
   }).catch(e => {
     document.getElementById("cards").innerHTML =

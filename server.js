@@ -359,7 +359,7 @@ app.get("/api/stats", (req, res) => {
   const byUserDay = {};
   const errBy = { code: {}, provider: {}, stage: {} };
   const sum = {
-    visits: 0, recStarts: 0, recStops: 0, recSecTotal: 0,
+    visits: 0, recStarts: 0, recStops: 0, recSecTotal: 0, recStopsReal: 0, recSecReal: 0,
     gen: 0, genOk: 0, genErr: 0, genSecTotal: 0, genMsTotal: 0, genMsCount: 0,
     word: 0, pdf: 0, copy: 0,
     ratingTotal: 0, ratingCount: 0, ratingDist: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
@@ -367,12 +367,12 @@ app.get("/api/stats", (req, res) => {
 
   function userOf(r) {
     const k = r.user || "—";
-    users[k] = users[k] || { visits: 0, recordings: 0, recSec: 0, protocols: 0, errors: 0, exports: 0, ratingTotal: 0, ratingCount: 0 };
+    users[k] = users[k] || { visits: 0, recordings: 0, recSec: 0, protocols: 0, errors: 0, exports: 0, exWord: 0, exPdf: 0, exCopy: 0, ratingTotal: 0, ratingCount: 0 };
     return users[k];
   }
   function udOf(user, d) {
     byUserDay[user] = byUserDay[user] || {};
-    byUserDay[user][d] = byUserDay[user][d] || { visits: 0, recordings: 0, protocols: 0, errors: 0, exports: 0 };
+    byUserDay[user][d] = byUserDay[user][d] || { visits: 0, recordings: 0, protocols: 0, errors: 0, exports: 0, exWord: 0, exPdf: 0, exCopy: 0 };
     return byUserDay[user][d];
   }
   function bumpErr(r) {
@@ -384,35 +384,60 @@ app.get("/api/stats", (req, res) => {
   for (const r of rows) {
     // Адмін-оверайди періоду — службові рядки; у статистику не йдуть (їх читає trialState).
     if (r.event === "trial_bonus" || r.event === "trial_reset" || r.event === "quota_reset") continue;
-    uniq.add(r.uid);
+    // demo (NEUTRAL_USERS) = QA-акаунт: per-user рядок (users/byUserDay) будуємо ЗАВЖДИ, щоб demo
+    // лишався видимим для QA, але у KPI-агрегати (uniqueDevices, sum, byDay, помилки) demo НЕ тече —
+    // інакше load-тести завищують числа в ~5× (demo = 81% протоколів).
+    const neutral = NEUTRAL_USERS.has(r.user || "—");
     const d = dayKey(r.t);
-    days[d] = days[d] || { visits: 0, recordings: 0, protocols: 0, exports: 0 };
     const u = userOf(r);
     const ud = udOf(r.user || "—", d);
+    if (!neutral) {
+      uniq.add(r.uid);
+      days[d] = days[d] || { visits: 0, recordings: 0, protocols: 0, exports: 0 };
+    }
     switch (r.event) {
-      case "visit": sum.visits++; days[d].visits++; u.visits++; ud.visits++; break;
-      case "rec_start": sum.recStarts++; break;
-      case "rec_stop":
-        sum.recStops++; days[d].recordings++; u.recordings++; ud.recordings++;
-        if (r.value) { sum.recSecTotal += r.value; u.recSec += r.value; } break;
-      case "generate": sum.gen++; break;
+      case "visit":
+        u.visits++; ud.visits++;
+        if (!neutral) { sum.visits++; days[d].visits++; }
+        break;
+      case "rec_start": if (!neutral) sum.recStarts++; break;
+      case "rec_stop": {
+        u.recordings++; ud.recordings++;
+        if (r.value) u.recSec += r.value;
+        const realRec = r.value >= 5 && r.value <= 1200; // <5с фальстарти, >20хв привиди — не в середню тривалість
+        if (!neutral) {
+          sum.recStops++; days[d].recordings++;
+          if (r.value) sum.recSecTotal += r.value;
+          if (realRec) { sum.recStopsReal++; sum.recSecReal += r.value; }
+        }
+        break;
+      }
+      case "generate": if (!neutral) sum.gen++; break;
       case "generate_ok":
         // Рахуємо ВСІ generate_ok: історичні (старий клієнт, без provider) + нові (сервер, з provider).
         // Подвоєння нема — у тому ж релізі клієнтський generate_ok прибрано, тож рядок на протокол один.
-        sum.genOk++; days[d].protocols++; u.protocols++; ud.protocols++;
-        if (typeof r.ms === "number") { sum.genMsTotal += r.ms; sum.genMsCount++; }
-        else if (r.value) sum.genSecTotal += r.value;
+        u.protocols++; ud.protocols++;
+        if (!neutral) {
+          sum.genOk++; days[d].protocols++;
+          if (typeof r.ms === "number") { sum.genMsTotal += r.ms; sum.genMsCount++; }
+          else if (r.value) sum.genSecTotal += r.value;
+        }
         break;
-      case "generate_err": sum.genErr++; u.errors++; ud.errors++; bumpErr(r); break;
-      case "transcribe_err": bumpErr(r); break;
-      case "export_word": sum.word++; days[d].exports++; u.exports++; ud.exports++; break;
-      case "export_pdf": sum.pdf++; days[d].exports++; u.exports++; ud.exports++; break;
-      case "export_copy": sum.copy++; days[d].exports++; u.exports++; ud.exports++; break;
+      case "generate_err":
+        u.errors++; ud.errors++;
+        if (!neutral) { sum.genErr++; bumpErr(r); }
+        break;
+      case "transcribe_err": if (!neutral) bumpErr(r); break;
+      case "export_word": u.exports++; u.exWord++; ud.exports++; ud.exWord++; if (!neutral) { sum.word++; days[d].exports++; } break;
+      case "export_pdf":  u.exports++; u.exPdf++;  ud.exports++; ud.exPdf++;  if (!neutral) { sum.pdf++;  days[d].exports++; } break;
+      case "export_copy": u.exports++; u.exCopy++; ud.exports++; ud.exCopy++; if (!neutral) { sum.copy++; days[d].exports++; } break;
       case "rating":
         if (r.value >= 1 && r.value <= 5) {
-          sum.ratingTotal += r.value; sum.ratingCount++;
-          sum.ratingDist[Math.round(r.value)]++;
           u.ratingTotal += r.value; u.ratingCount++;
+          if (!neutral) {
+            sum.ratingTotal += r.value; sum.ratingCount++;
+            sum.ratingDist[Math.round(r.value)]++;
+          }
         }
         break;
     }
@@ -425,11 +450,16 @@ app.get("/api/stats", (req, res) => {
     const activeDays = Object.keys(dmap).filter((d) => dmap[d].protocols > 0).sort();
     const lastActiveDay = activeDays.length ? activeDays[activeDays.length - 1] : null;
     let protocols7d = 0, protocols30d = 0;
+    const ex7 = { word: 0, pdf: 0, copy: 0 };
     for (const d of Object.keys(dmap)) {
       const diff = dayDiff(today, d);
-      if (diff >= 0 && diff <= 6) protocols7d += dmap[d].protocols;
+      if (diff >= 0 && diff <= 6) {
+        protocols7d += dmap[d].protocols;
+        ex7.word += dmap[d].exWord || 0; ex7.pdf += dmap[d].exPdf || 0; ex7.copy += dmap[d].exCopy || 0;
+      }
       if (diff >= 0 && diff <= 29) protocols30d += dmap[d].protocols;
     }
+    const outputOut7d = (ex7.word + ex7.pdf + ex7.copy) > 0;
     // Серія: послідовні календарні дні з протоколами, що закінчуються на lastActiveDay.
     let streak = 0;
     if (lastActiveDay) {
@@ -446,6 +476,7 @@ app.get("/api/stats", (req, res) => {
       lastActiveDay,
       daysSinceActive: lastActiveDay ? dayDiff(today, lastActiveDay) : null,
       protocols7d, protocols30d,
+      exports7d: ex7, outputOut7d,
       activeDaysStreak: streak,
       protocolsTotal: protocols,
       protocolQuota: PROTOCOL_QUOTA_BY_USER[user] || null,
@@ -472,7 +503,8 @@ app.get("/api/stats", (req, res) => {
     uniqueDevices: uniq.size,
     visits: sum.visits,
     recordings: sum.recStops,
-    avgRecordingSec: sum.recStops ? Math.round(sum.recSecTotal / sum.recStops) : 0,
+    avgRecordingSec: sum.recStopsReal ? Math.round(sum.recSecReal / sum.recStopsReal) : 0,
+    recordingsTrimmed: sum.recStops - sum.recStopsReal,
     protocolsGenerated: sum.genOk,
     generateErrors: sum.genErr,
     // Середній час: із серверного ms (точний, без RTT) для нових рядків, інакше зі старих секунд.
