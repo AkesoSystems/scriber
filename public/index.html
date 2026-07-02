@@ -228,9 +228,8 @@
     letter-spacing:.06em;text-transform:uppercase;cursor:pointer;}
   .bd-page{display:flex;flex-direction:column;height:297mm;overflow:hidden;background:#fff;
     margin:0 auto 18px;box-shadow:0 10px 34px rgba(0,0,0,.45);}
-  .bd-page .bd-ftr{margin-top:auto;}
-  /* блок підпису у сторінковому вигляді — притиснутий до низу аркуша (над футером), як в оригіналі */
-  .bd-page .bd-sigwrap{margin-top:auto;}
+  /* один гнучкий проміжок штовхає підпис+футер донизу; гап іде НАД підписом (як в оригіналі) */
+  .bd-page .bd-spacer{flex:1 1 auto;}
   #printArea{display:none;}
 
   /* ── Мобільна ── */
@@ -651,8 +650,9 @@
         pi.paras.forEach(n => inner.appendChild(n.cloneNode(true)));
         body.appendChild(inner); pg.appendChild(body);
       }
+      if (pi.tail && hasImgs){ const c = canvas.cloneNode(true); c.querySelectorAll(".bd-del,.bd-rz").forEach(x => x.remove()); pg.appendChild(c); }
+      const spacer = document.createElement("div"); spacer.className = "bd-spacer"; pg.appendChild(spacer);  // гнучкий гап НАД підписом
       if (pi.tail){
-        if (hasImgs){ const c = canvas.cloneNode(true); c.querySelectorAll(".bd-del,.bd-rz").forEach(x => x.remove()); pg.appendChild(c); }
         const sw = document.createElement("div"); sw.className = "bd-sigwrap";
         if (signrow) sw.appendChild(signrow.cloneNode(true));
         if (disc) sw.appendChild(disc.cloneNode(true));
