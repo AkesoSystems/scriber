@@ -209,16 +209,15 @@
   /* друк брендованого: хедер/футер повторюються на кожній сторінці; маркери редагування зникають.
      Селектори прив'язані до .branded-doc → плоскі шаблони друкуються як раніше. */
   @media print{
-    .branded-doc{width:100%;}
     .branded-doc .bd-del,.branded-doc .bd-rz{display:none!important;}
     .branded-doc .bd-img{outline:none!important;}
-    .branded-doc .bd-hdr{position:fixed;top:0;left:0;right:0;}
-    .branded-doc .bd-ftr{position:fixed;bottom:0;left:0;right:0;}
-    .branded-doc .bd-body{padding-top:34mm;}
-    .branded-doc .bd-img{break-inside:avoid;}
-    /* блок підпису+дисклеймер не розривати між сторінками */
-    .branded-doc .bd-signrow,.branded-doc .bd-disc{break-inside:avoid;}
-    .branded-doc .bd-disc{break-before:avoid;}
+    /* Детермінований друк брендованого: друкуємо ГОТОВІ A4-аркуші з #printArea (як у «Сторінки»),
+       а не віддаємо суцільний #doc браузеру. Прив'язано до body.pbrand → плоскі шаблони не зачеплені. */
+    body.pbrand > *:not(#printArea){display:none!important;}
+    body.pbrand #printArea{display:block!important;}
+    body.pbrand #printArea, body.pbrand #printArea *{visibility:visible!important;}
+    #printArea .bd-page{page-break-after:always;box-shadow:none;margin:0;}
+    #printArea .bd-page:last-child{page-break-after:auto;}
   }
 
   /* Перегляд по сторінках (модалка з окремими A4-аркушами) */
@@ -230,6 +229,9 @@
   .bd-page{display:flex;flex-direction:column;height:297mm;overflow:hidden;background:#fff;
     margin:0 auto 18px;box-shadow:0 10px 34px rgba(0,0,0,.45);}
   .bd-page .bd-ftr{margin-top:auto;}
+  /* блок підпису у сторінковому вигляді — притиснутий до низу аркуша (над футером), як в оригіналі */
+  .bd-page .bd-sigwrap{margin-top:auto;}
+  #printArea{display:none;}
 
   /* ── Мобільна ── */
   @media(max-width:700px){
@@ -329,6 +331,8 @@
   <button class="pg-close" id="pgClose" type="button">Закрити ✕</button>
   <div class="pg-wrap" id="pgWrap"></div>
 </div>
+
+<div id="printArea" aria-hidden="true"></div>
 
 <script>
 (function(){
@@ -617,51 +621,60 @@
     const hasImgs = canvas && canvas.querySelectorAll(".bd-img").length;
     const signrow = bd.querySelector(".bd-signrow"), disc = bd.querySelector(".bd-disc");
     const meas = document.createElement("div");
-    meas.style.cssText = "position:absolute;left:-9999px;top:0;width:161mm;font-family:'Times New Roman',serif;font-size:14pt;line-height:1.5;";
+    meas.style.cssText = "position:absolute;left:-9999px;top:0;width:161mm;font-family:'Times New Roman',serif;font-size:14pt;line-height:1.3;";
     document.body.appendChild(meas);
     const H = node => { meas.innerHTML = ""; const c = node.cloneNode(true); meas.appendChild(c); return c.offsetHeight; };
-    const flow = paras.map(n => ({ type:"p", node:n }));
-    if (hasImgs) flow.push({ type:"canvas", node:canvas });
-    const sigGroup = document.createElement("div");
-    if (signrow) sigGroup.appendChild(signrow.cloneNode(true));
-    if (disc) sigGroup.appendChild(disc.cloneNode(true));
-    flow.push({ type:"sig", node:sigGroup });
+    // ХВІСТ = знімки + підпис + дисклеймер як ОДИН неподільний блок (лягає на один аркуш, як в оригіналі)
+    const tailMeas = document.createElement("div");
+    if (hasImgs) tailMeas.appendChild(canvas.cloneNode(true));
+    const swM = document.createElement("div"); if (signrow) swM.appendChild(signrow.cloneNode(true)); if (disc) swM.appendChild(disc.cloneNode(true));
+    tailMeas.appendChild(swM);
+    const tailH = H(tailMeas);
+    // пакуємо абзаци у сторінки
     const pagesItems = []; let cur = [], curH = 0;
-    for (const it of flow){
-      const ih = H(it.node) + 2;   // мінімальний запас (не роздувати суму по 22 елементах)
-      if (curH + ih > usable && cur.length){ pagesItems.push(cur); cur = []; curH = 0; }
-      cur.push(it); curH += ih;
+    for (const n of paras){
+      const ih = H(n) + 2;
+      if (curH + ih > usable && cur.length){ pagesItems.push({ paras: cur }); cur = []; curH = 0; }
+      cur.push(n); curH += ih;
     }
-    if (cur.length) pagesItems.push(cur);
+    // хвіст: на поточний аркуш, якщо влазить; інакше — окремий (знімок+підпис РАЗОМ)
+    if (curH + tailH > usable && cur.length){ pagesItems.push({ paras: cur }); cur = []; curH = 0; }
+    pagesItems.push({ paras: cur, tail: true });
     document.body.removeChild(meas);
-    return pagesItems.map(items => {
+    return pagesItems.map(pi => {
       const pg = document.createElement("div"); pg.className = "branded-doc bd-page";
       pg.innerHTML = '<img class="bd-hdr" src="' + p.header + '">';
-      const inner = document.createElement("div");
-      inner.style.cssText = "font-family:'Times New Roman',Georgia,serif;font-size:14pt;line-height:1.5;text-align:left;color:#000";
-      let hasP = false;
-      items.forEach(it => { if (it.type === "p"){ inner.appendChild(it.node.cloneNode(true)); hasP = true; } });
-      if (hasP){ const body = document.createElement("div"); body.className = "bd-body"; body.appendChild(inner); pg.appendChild(body); }
-      items.forEach(it => {
-        if (it.type === "canvas"){ const c = it.node.cloneNode(true); c.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove()); pg.appendChild(c); }
-        else if (it.type === "sig"){ Array.from(it.node.childNodes).forEach(n => pg.appendChild(n.cloneNode(true))); }
-      });
+      if (pi.paras && pi.paras.length){
+        const body = document.createElement("div"); body.className = "bd-body";
+        const inner = document.createElement("div");
+        inner.style.cssText = "font-family:'Times New Roman',Georgia,serif;font-size:14pt;line-height:1.3;text-align:left;color:#000";
+        pi.paras.forEach(n => inner.appendChild(n.cloneNode(true)));
+        body.appendChild(inner); pg.appendChild(body);
+      }
+      if (pi.tail){
+        if (hasImgs){ const c = canvas.cloneNode(true); c.querySelectorAll(".bd-del,.bd-rz").forEach(x => x.remove()); pg.appendChild(c); }
+        const sw = document.createElement("div"); sw.className = "bd-sigwrap";
+        if (signrow) sw.appendChild(signrow.cloneNode(true));
+        if (disc) sw.appendChild(disc.cloneNode(true));
+        pg.appendChild(sw);
+      }
       pg.insertAdjacentHTML("beforeend", '<img class="bd-ftr" src="' + p.footer + '">');
       return pg;
     });
   }
-  function openPagePreview(){
+  // Готові A4-аркуші поточного брендованого протоколу (спільне для «Сторінки» і друку → WYSIWYG)
+  function buildSheets(){
     const bd = doc.querySelector(".branded-doc"), p = brandOf();
-    if (!bd || !p) return;
-    pgWrap.innerHTML = "";
-    let pages = null;
-    try { pages = paginate(bd, p); } catch(_){ pages = null; }
-    if (!pages || !pages.length){                      // запасний варіант — один аркуш
-      const pg = bd.cloneNode(true); pg.classList.add("bd-page");
-      pg.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove());
-      pg.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
-      pgWrap.appendChild(pg);
-    } else { pages.forEach(pg => pgWrap.appendChild(pg)); }
+    if (!bd || !p) return [];
+    try { const s = paginate(bd, p); if (s && s.length) return s; } catch(_){}
+    const pg = bd.cloneNode(true); pg.classList.add("bd-page");
+    pg.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove());
+    pg.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
+    return [pg];
+  }
+  function openPagePreview(){
+    const sheets = buildSheets(); if (!sheets.length) return;
+    pgWrap.innerHTML = ""; sheets.forEach(s => pgWrap.appendChild(s));
     pageModal.classList.add("show"); pageModal.setAttribute("aria-hidden", "false");
   }
   function closePagePreview(){ pageModal.classList.remove("show"); pageModal.setAttribute("aria-hidden", "true"); pgWrap.innerHTML = ""; }
@@ -1031,7 +1044,19 @@
   pdfBtn.addEventListener("click", () => {
     if (!doc.innerHTML.trim()) return setStatus("Документ порожній.", true);
     track("export_pdf");
-    window.print();
+    if (brandOf()){
+      // Брендований: друкуємо ГОТОВІ A4-аркуші (детерміновано, = «Сторінки»), а не суцільний #doc
+      const pa = document.getElementById("printArea");
+      pa.innerHTML = ""; buildSheets().forEach(s => pa.appendChild(s));
+      const st = document.createElement("style"); st.id = "pbrandpage"; st.textContent = "@page{margin:0}"; document.head.appendChild(st);
+      document.body.classList.add("pbrand");
+      const cleanup = () => { document.body.classList.remove("pbrand"); pa.innerHTML = ""; const s = document.getElementById("pbrandpage"); if (s) s.remove(); window.removeEventListener("afterprint", cleanup); };
+      window.addEventListener("afterprint", cleanup);
+      window.print();
+      setTimeout(cleanup, 2000);   // страховка, якщо afterprint не спрацював
+    } else {
+      window.print();
+    }
     wipeDraft();
     showRating();
   });
