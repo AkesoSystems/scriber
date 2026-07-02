@@ -610,7 +610,7 @@
   // ── Перегляд по сторінках: розбиває брендований протокол на окремі A4-аркуші (з бренд-рамкою на кожному) ──
   const PXMM = 96 / 25.4;
   function paginate(bd, p){
-    const usable = (297 - 32 - 11 - 6) * PXMM;   // A4 мінус хедер(≈32мм) мінус футер(≈11мм) мінус запас
+    const usable = (297 - 32 - 11 - 4) * PXMM;   // A4 мінус хедер(≈32мм) мінус футер(≈11мм) мінус малий запас
     const bodyInner = bd.querySelector(".bd-body") ? bd.querySelector(".bd-body").firstElementChild : null;
     const paras = bodyInner ? Array.from(bodyInner.children) : [];
     const canvas = bd.querySelector(".bd-canvas");
@@ -628,7 +628,7 @@
     flow.push({ type:"sig", node:sigGroup });
     const pagesItems = []; let cur = [], curH = 0;
     for (const it of flow){
-      const ih = H(it.node) + 8;
+      const ih = H(it.node) + 2;   // мінімальний запас (не роздувати суму по 22 елементах)
       if (curH + ih > usable && cur.length){ pagesItems.push(cur); cur = []; curH = 0; }
       cur.push(it); curH += ih;
     }
