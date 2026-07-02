@@ -1048,7 +1048,7 @@
       // Брендований: друкуємо ГОТОВІ A4-аркуші (детерміновано, = «Сторінки»), а не суцільний #doc
       const pa = document.getElementById("printArea");
       pa.innerHTML = ""; buildSheets().forEach(s => pa.appendChild(s));
-      const st = document.createElement("style"); st.id = "pbrandpage"; st.textContent = "@page{margin:0}"; document.head.appendChild(st);
+      const st = document.createElement("style"); st.id = "pbrandpage"; st.textContent = "@page{size:A4;margin:0}"; document.head.appendChild(st);
       document.body.classList.add("pbrand");
       const cleanup = () => { document.body.classList.remove("pbrand"); pa.innerHTML = ""; const s = document.getElementById("pbrandpage"); if (s) s.remove(); window.removeEventListener("afterprint", cleanup); };
       window.addEventListener("afterprint", cleanup);
