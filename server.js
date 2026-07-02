@@ -983,29 +983,29 @@ ${KRAVCHENKO_CT_BLANK}
 // Бланк = ЛИШЕ вміст опису (Times); фірмову рамку OVRU (хедер/футер/печатка/підпис/дисклеймер) +
 // вставку знімків накладає КЛІЄНТ (BRAND_PROFILES.kravchenko_thorax у index.html). LLM бренд не бачить.
 // Норма легень «не змінена» — з її ж kravchenko_ct (не вигадана). Заключення-норма «Патологічних змін не виявлено».
-const KRAVCHENKO_THORAX_BLANK = `<div style="font-family:'Times New Roman',Georgia,serif;font-size:14pt;line-height:1.5;text-align:left;color:#000">
-<p style="margin:0 0 12px"><b>Дата:</b> </p>
-<p style="margin:0 0 12px"><b>Анамнестичні дані:</b> </p>
-<p style="margin:0 0 12px"><b>Пацієнт:</b> </p>
-<p style="margin:0 0 12px"><b>Власник:</b> </p>
-<p style="margin:0 0 12px"><b>Вид дослідження:</b> Рентгенографія грудної порожнини в 2х ортогональних проекціях</p>
-<p style="margin:12px 0 8px;font-weight:bold">Опис:</p>
-<p style="margin:0 0 7px">Глотка та гортань - не візуалізується</p>
-<p style="margin:0 0 7px">Паренхіма легень – не змінена</p>
-<p style="margin:0 0 7px">Трахея - не зміщена, порожнина не змінена</p>
-<p style="margin:0 0 7px">Бронхи - головні і дольові, порожнина не змінена, не зміщені</p>
-<p style="margin:0 0 7px">Плевральна порожнина – не змінена</p>
-<p style="margin:0 0 7px">Перибронхіальні лімфатичні вузли - не візуалізуються</p>
-<p style="margin:0 0 7px">Стернальні лімфатичні вузли - не візуалізуються</p>
-<p style="margin:0 0 7px">Середостіння – не змінене</p>
-<p style="margin:0 0 7px">Серце і судини - форма не змінена, об'єм не змінений, змін дольових і головних судин не виявлено</p>
-<p style="margin:0 0 7px">Стравохід – не змінений</p>
-<p style="margin:0 0 7px">Грудна клітка - не змінена</p>
-<p style="margin:0 0 7px">М'які тканини - не змінені</p>
-<p style="margin:12px 0 6px;font-weight:bold">Заключення:</p>
-<p style="margin:0 0 7px">Патологічних змін не виявлено</p>
-<p style="margin:12px 0 6px;font-weight:bold">Рекомендовано:</p>
-<p style="margin:0 0 7px"></p>
+const KRAVCHENKO_THORAX_BLANK = `<div style="font-family:'Times New Roman',Georgia,serif;font-size:14pt;line-height:1.3;text-align:left;color:#000">
+<p style="margin:0 0 6px"><b>Дата:</b> </p>
+<p style="margin:0 0 6px"><b>Анамнестичні дані:</b> </p>
+<p style="margin:0 0 6px"><b>Пацієнт:</b> </p>
+<p style="margin:0 0 6px"><b>Власник:</b> </p>
+<p style="margin:0 0 6px"><b>Вид дослідження:</b> Рентгенографія грудної порожнини в 2х ортогональних проекціях</p>
+<p style="margin:9px 0 5px;font-weight:bold">Опис:</p>
+<p style="margin:0 0 4px">Глотка та гортань - не візуалізується</p>
+<p style="margin:0 0 4px">Паренхіма легень – не змінена</p>
+<p style="margin:0 0 4px">Трахея - не зміщена, порожнина не змінена</p>
+<p style="margin:0 0 4px">Бронхи - головні і дольові, порожнина не змінена, не зміщені</p>
+<p style="margin:0 0 4px">Плевральна порожнина – не змінена</p>
+<p style="margin:0 0 4px">Перибронхіальні лімфатичні вузли - не візуалізуються</p>
+<p style="margin:0 0 4px">Стернальні лімфатичні вузли - не візуалізуються</p>
+<p style="margin:0 0 4px">Середостіння – не змінене</p>
+<p style="margin:0 0 4px">Серце і судини - форма не змінена, об'єм не змінений, змін дольових і головних судин не виявлено</p>
+<p style="margin:0 0 4px">Стравохід – не змінений</p>
+<p style="margin:0 0 4px">Грудна клітка - не змінена</p>
+<p style="margin:0 0 4px">М'які тканини - не змінені</p>
+<p style="margin:9px 0 4px;font-weight:bold">Заключення:</p>
+<p style="margin:0 0 4px">Патологічних змін не виявлено</p>
+<p style="margin:9px 0 4px;font-weight:bold">Рекомендовано:</p>
+<p style="margin:0 0 4px"></p>
 </div>`;
 const SYSTEM_PROMPT_KRAVCHENKO_THORAX = `Ти — медичний редактор, що оформлює протоколи ветеринарної рентгенографії грудної порожнини українською у форматі лікаря Катерини Кравченко (OVRU). Готовий протокол має ВИГЛЯДАТИ ТОЧНО як бланк: та сама структура, ті самі формулювання, той самий порядок.
 
