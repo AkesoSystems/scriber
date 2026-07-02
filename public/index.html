@@ -565,41 +565,52 @@
   function exportRoot(){ return doc.querySelector(".branded-doc .bd-body") || doc; }
   function bdCanvas(){ return doc.querySelector(".branded-doc .bd-canvas"); }
 
-  // ── знімки: base64 (переживає друк), ОБМЕЖЕНЕ перетягування (у межах полотна → не налазить на підпис) + розмір + видалення ──
+  // ── знімки: base64, перетягування(гориз. у межах)+розмір+видалення; полотно росте під знімки ──
   const imgBtn = document.getElementById("imgBtn");
   const imgFile = document.getElementById("imgFile");
-  let imgSeq = 0;
+  let imgSeq = 0, imgIdx = 0;
   function clampImg(el, canvas){
     const cw = canvas.clientWidth;
     let l = parseFloat(el.style.left) || 0, t = parseFloat(el.style.top) || 0;
     el.style.left = Math.max(0, Math.min(l, Math.max(0, cw - el.offsetWidth))) + "px";  // горизонталь у межах
     el.style.top  = Math.max(0, t) + "px";                                              // вертикаль вільна
   }
-  // полотно РОСТЕ під найнижчий знімок → підпис/футер завжди нижче (знімок не налазить на підпис)
-  function reflowCanvas(){
-    const c = bdCanvas(); if (!c) return;
+  function reflowCanvasEl(c){                                // полотно РОСТЕ під знімки → підпис завжди нижче
+    if (!c) return;
     const imgs = c.querySelectorAll(".bd-img");
-    if (!imgs.length){ c.style.height = "0px"; return; }   // порожнє полотно = 0 (підпис не з'їжджає на 2-гу стор.)
+    if (!imgs.length){ c.style.height = "0px"; return; }
     let maxB = 0; imgs.forEach(el => { maxB = Math.max(maxB, el.offsetTop + el.offsetHeight); });
-    c.style.height = (maxB + 14) + "px";                   // росте під знімки → підпис завжди нижче
+    c.style.height = (maxB + 14) + "px";
+  }
+  function reflowCanvas(){ reflowCanvasEl(bdCanvas()); }
+  function docImgByIdx(idx){ const c = bdCanvas(); return c ? c.querySelector('.bd-img[data-idx="' + idx + '"]') : null; }
+  // навісити перетягування+розмір; mirror=true → дзеркалити зміни у #doc-оригінал (для інтерактиву в модалці)
+  function wireImg(el, canvas, mirror){
+    const rz = el.querySelector(".bd-rz"), del = el.querySelector(".bd-del");
+    const sync = () => {
+      reflowCanvasEl(canvas);
+      if (mirror){ const o = docImgByIdx(el.dataset.idx); if (o){ o.style.left = el.style.left; o.style.top = el.style.top; o.style.width = el.style.width; reflowCanvas(); } }
+    };
+    let drag = null, rs = null;
+    el.addEventListener("pointerdown", e => { if (e.target === rz || e.target === del) return; el.style.zIndex = String(++imgSeq); drag = { x:e.clientX, y:e.clientY, l:el.offsetLeft, t:el.offsetTop }; el.setPointerCapture(e.pointerId); });
+    el.addEventListener("pointermove", e => { if (!drag) return; el.style.left = (drag.l + (e.clientX - drag.x)) + "px"; el.style.top = (drag.t + (e.clientY - drag.y)) + "px"; clampImg(el, canvas); sync(); });
+    el.addEventListener("pointerup", () => { drag = null; });
+    if (rz){
+      rz.addEventListener("pointerdown", e => { e.stopPropagation(); e.preventDefault(); rs = { x:e.clientX, w:el.offsetWidth }; rz.setPointerCapture(e.pointerId); });
+      rz.addEventListener("pointermove", e => { if (!rs) return; const cw = canvas.clientWidth; let w = Math.max(80, rs.w + (e.clientX - rs.x)); w = Math.min(w, cw); el.style.width = Math.round(w / cw * 100) + "%"; clampImg(el, canvas); sync(); });
+      rz.addEventListener("pointerup", () => { rs = null; });
+    }
+    if (del) del.addEventListener("click", () => { const idx = el.dataset.idx; el.remove(); if (mirror){ const o = docImgByIdx(idx); if (o){ o.remove(); reflowCanvas(); } } reflowCanvasEl(canvas); });
   }
   function addBrandedImage(src){
     const canvas = bdCanvas(); if (!canvas) return;
     const off = (imgSeq % 4) * 10;
-    const el = document.createElement("div"); el.className = "bd-img";
-    el.style.left = (18 + off) + "px"; el.style.top = (6 + off) + "px"; el.style.zIndex = String(++imgSeq);
+    const el = document.createElement("div"); el.className = "bd-img"; el.dataset.idx = String(imgIdx++);
+    el.style.left = (18 + off) + "px"; el.style.top = (6 + off) + "px"; el.style.zIndex = String(++imgSeq); el.style.width = "52%";
     el.innerHTML = '<img src="' + src + '" alt="рентген"><span class="bd-rz"></span><span class="bd-del">×</span>';
     canvas.appendChild(el);
-    const rz = el.querySelector(".bd-rz"), del = el.querySelector(".bd-del");
-    el.querySelector("img").addEventListener("load", reflowCanvas);   // висота відома після завантаження
-    let drag = null, rs = null;
-    el.addEventListener("pointerdown", e => { if (e.target === rz || e.target === del) return; el.style.zIndex = String(++imgSeq); drag = { x:e.clientX, y:e.clientY, l:el.offsetLeft, t:el.offsetTop }; el.setPointerCapture(e.pointerId); });
-    el.addEventListener("pointermove", e => { if (!drag) return; el.style.left = (drag.l + (e.clientX - drag.x)) + "px"; el.style.top = (drag.t + (e.clientY - drag.y)) + "px"; clampImg(el, canvas); reflowCanvas(); });
-    el.addEventListener("pointerup", () => { drag = null; });
-    rz.addEventListener("pointerdown", e => { e.stopPropagation(); e.preventDefault(); rs = { x:e.clientX, w:el.offsetWidth }; rz.setPointerCapture(e.pointerId); });
-    rz.addEventListener("pointermove", e => { if (!rs) return; const cw = canvas.clientWidth; let w = Math.max(80, rs.w + (e.clientX - rs.x)); w = Math.min(w, cw); el.style.width = Math.round(w / cw * 100) + "%"; clampImg(el, canvas); reflowCanvas(); });
-    rz.addEventListener("pointerup", () => { rs = null; });
-    del.addEventListener("click", () => { el.remove(); reflowCanvas(); });
+    el.querySelector("img").addEventListener("load", reflowCanvas);
+    wireImg(el, canvas, false);
     reflowCanvas();
   }
   if (imgBtn && imgFile){
@@ -614,34 +625,26 @@
 
   // ── Перегляд по сторінках: розбиває брендований протокол на окремі A4-аркуші (з бренд-рамкою на кожному) ──
   const PXMM = 96 / 25.4;
-  function paginate(bd, p){
+  function paginate(bd, p, interactive){
     const usable = (297 - 32 - 11 - 4) * PXMM;   // A4 мінус хедер(≈32мм) мінус футер(≈11мм) мінус малий запас
     const bodyInner = bd.querySelector(".bd-body") ? bd.querySelector(".bd-body").firstElementChild : null;
     const paras = bodyInner ? Array.from(bodyInner.children) : [];
     const canvas = bd.querySelector(".bd-canvas");
     const hasImgs = canvas && canvas.querySelectorAll(".bd-img").length;
     const signrow = bd.querySelector(".bd-signrow"), disc = bd.querySelector(".bd-disc");
-    const meas = document.createElement("div");
-    meas.style.cssText = "position:absolute;left:-9999px;top:0;width:161mm;font-family:'Times New Roman',serif;font-size:14pt;line-height:1.3;";
-    document.body.appendChild(meas);
-    const H = node => { meas.innerHTML = ""; const c = node.cloneNode(true); meas.appendChild(c); return c.offsetHeight; };
-    // ХВІСТ = знімки + підпис + дисклеймер як ОДИН неподільний блок (лягає на один аркуш, як в оригіналі)
-    const tailMeas = document.createElement("div");
-    if (hasImgs) tailMeas.appendChild(canvas.cloneNode(true));
-    const swM = document.createElement("div"); if (signrow) swM.appendChild(signrow.cloneNode(true)); if (disc) swM.appendChild(disc.cloneNode(true));
-    tailMeas.appendChild(swM);
-    const tailH = H(tailMeas);
-    // пакуємо абзаци у сторінки
-    const pagesItems = []; let cur = [], curH = 0;
-    for (const n of paras){
-      const ih = H(n) + 2;
-      if (curH + ih > usable && cur.length){ pagesItems.push({ paras: cur }); cur = []; curH = 0; }
-      cur.push(n); curH += ih;
+    // РЕАЛЬНІ висоти абзаців з живого рендеру #doc (offsetTop/offsetHeight) → точний поділ незалежно від стилів LLM
+    const pagesItems = [];
+    let startIdx = 0, startTop = paras.length ? paras[0].offsetTop : 0;
+    for (let i = 0; i < paras.length; i++){
+      const bottom = paras[i].offsetTop + paras[i].offsetHeight;
+      if (bottom - startTop > usable && i > startIdx){ pagesItems.push({ paras: paras.slice(startIdx, i) }); startIdx = i; startTop = paras[i].offsetTop; }
     }
-    // хвіст: на поточний аркуш, якщо влазить; інакше — окремий (знімок+підпис РАЗОМ)
-    if (curH + tailH > usable && cur.length){ pagesItems.push({ paras: cur }); cur = []; curH = 0; }
-    pagesItems.push({ paras: cur, tail: true });
-    document.body.removeChild(meas);
+    const restParas = paras.slice(startIdx);
+    const restH = restParas.length ? (restParas[restParas.length - 1].offsetTop + restParas[restParas.length - 1].offsetHeight - restParas[0].offsetTop) : 0;
+    // ХВІСТ = знімки + підпис + дисклеймер як ОДИН неподільний блок (лягає на один аркуш, як в оригіналі)
+    const tailH = (hasImgs && canvas ? canvas.offsetHeight : 0) + (signrow ? signrow.offsetHeight : 0) + (disc ? disc.offsetHeight : 0);
+    if (restH + tailH > usable && restParas.length){ pagesItems.push({ paras: restParas }); pagesItems.push({ paras: [], tail: true }); }
+    else { pagesItems.push({ paras: restParas, tail: true }); }
     return pagesItems.map(pi => {
       const pg = document.createElement("div"); pg.className = "branded-doc bd-page";
       pg.innerHTML = '<img class="bd-hdr" src="' + p.header + '">';
@@ -652,7 +655,12 @@
         pi.paras.forEach(n => inner.appendChild(n.cloneNode(true)));
         body.appendChild(inner); pg.appendChild(body);
       }
-      if (pi.tail && hasImgs){ const c = canvas.cloneNode(true); c.querySelectorAll(".bd-del,.bd-rz").forEach(x => x.remove()); pg.appendChild(c); }
+      if (pi.tail && hasImgs){
+        const c = canvas.cloneNode(true);
+        if (interactive){ c.querySelectorAll(".bd-img").forEach(im => wireImg(im, c, true)); c.querySelectorAll("img").forEach(im => im.addEventListener("load", () => reflowCanvasEl(c))); reflowCanvasEl(c); }
+        else { c.querySelectorAll(".bd-del,.bd-rz").forEach(x => x.remove()); }
+        pg.appendChild(c);
+      }
       const spacer = document.createElement("div"); spacer.className = "bd-spacer"; pg.appendChild(spacer);  // гнучкий гап НАД підписом
       if (pi.tail){
         const sw = document.createElement("div"); sw.className = "bd-sigwrap";
@@ -665,17 +673,17 @@
     });
   }
   // Готові A4-аркуші поточного брендованого протоколу (спільне для «Сторінки» і друку → WYSIWYG)
-  function buildSheets(){
+  function buildSheets(interactive){
     const bd = doc.querySelector(".branded-doc"), p = brandOf();
     if (!bd || !p) return [];
-    try { const s = paginate(bd, p); if (s && s.length) return s; } catch(_){}
+    try { const s = paginate(bd, p, interactive); if (s && s.length) return s; } catch(_){}
     const pg = bd.cloneNode(true); pg.classList.add("bd-page");
     pg.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove());
     pg.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
     return [pg];
   }
   function openPagePreview(){
-    const sheets = buildSheets(); if (!sheets.length) return;
+    const sheets = buildSheets(true); if (!sheets.length) return;   // interactive: знімки рухаються прямо в модалці
     pgWrap.innerHTML = ""; sheets.forEach(s => pgWrap.appendChild(s));
     pageModal.classList.add("show"); pageModal.setAttribute("aria-hidden", "false");
   }
@@ -1049,7 +1057,7 @@
     if (brandOf()){
       // Брендований: друкуємо ГОТОВІ A4-аркуші (детерміновано, = «Сторінки»), а не суцільний #doc
       const pa = document.getElementById("printArea");
-      pa.innerHTML = ""; buildSheets().forEach(s => pa.appendChild(s));
+      pa.innerHTML = ""; buildSheets(false).forEach(s => pa.appendChild(s));
       const st = document.createElement("style"); st.id = "pbrandpage"; st.textContent = "@page{size:A4;margin:0}"; document.head.appendChild(st);
       document.body.classList.add("pbrand");
       const cleanup = () => { document.body.classList.remove("pbrand"); pa.innerHTML = ""; const s = document.getElementById("pbrandpage"); if (s) s.remove(); window.removeEventListener("afterprint", cleanup); };
