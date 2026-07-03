@@ -203,9 +203,8 @@
   .branded-doc .bd-stamp{flex:0 0 96mm;text-align:center;}
   .branded-doc .bd-stamp img{width:40mm;height:auto;display:inline-block;}
   .branded-doc .bd-sig{flex:1;text-align:center;font-family:var(--geo);}
-  .branded-doc .bd-sig .ink{width:58mm;height:auto;display:block;margin:0 auto;}
-  .branded-doc .bd-sig .bd-line{border-top:1px solid #5b3fc4;width:58mm;margin:1mm auto 2mm;}
-  .branded-doc .bd-sig .bd-name{font-size:13pt;line-height:1.3;}
+  .branded-doc .bd-sig .ink{width:62mm;height:auto;display:block;margin:0 auto;}  /* повний підпис + лінія в зображенні */
+  .branded-doc .bd-sig .bd-name{font-size:13pt;line-height:1.3;margin-top:1mm;}
   .branded-doc .bd-disc{margin:10px 16mm 6px;text-align:center;font-family:var(--geo);font-size:12pt;line-height:1.4;}
 
   /* друк брендованого: хедер/футер повторюються на кожній сторінці; маркери редагування зникають.
@@ -542,7 +541,7 @@
   const BRAND_PROFILES = {
     kravchenko_thorax: {
       header:"/brand/ovru/header.png", footer:"/brand/ovru/footer.png",
-      stamp:"/brand/ovru/stamp.png", signature:"/brand/ovru/signature.png",
+      stamp:"/brand/ovru/stamp.png", signature:"/brand/ovru/signature-v2.png",
       name:"Кравченко К.П.", title:"Ветеринарний лікар рентгенолог",
       disclaimer:"Заключення не являється кінцевим діагнозом і повинно оцінюватись лікуючим лікарем разом з анамнестичними даними та іншими методами діагностики."
     }
@@ -555,7 +554,7 @@
       + '<div class="bd-body" contenteditable="true">' + innerHtml + '</div>'
       + '<div class="bd-canvas"></div>'
       + '<div class="bd-signrow"><div class="bd-stamp"><img src="' + p.stamp + '" alt=""></div>'
-      + '<div class="bd-sig"><img class="ink" src="' + p.signature + '" alt=""><div class="bd-line"></div>'
+      + '<div class="bd-sig"><img class="ink" src="' + p.signature + '" alt="">'   // лінія вже в зображенні підпису
       + '<div class="bd-name">' + bdEsc(p.name) + '<br>' + bdEsc(p.title) + '</div></div></div>'
       + '<div class="bd-disc">' + bdEsc(p.disclaimer) + '</div>'
       + '<img class="bd-ftr" src="' + p.footer + '" alt="">'
@@ -617,6 +616,21 @@
     imgBtn.addEventListener("click", () => imgFile.click());
     imgFile.addEventListener("change", () => { Array.from(imgFile.files).forEach(f => { const r = new FileReader(); r.onload = () => addBrandedImage(r.result); r.readAsDataURL(f); }); imgFile.value = ""; });
   }
+  // Вставка знімка з буфера (Ctrl+V): скріншот УЗД/рентгена одразу лягає у протокол (лише брендований шаблон; текст-вставка не зачіпається)
+  document.addEventListener("paste", e => {
+    if (!brandOf()) return;
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    for (const it of items){
+      if (it.type && it.type.indexOf("image") === 0){
+        const f = it.getAsFile(); if (!f) continue;
+        e.preventDefault();
+        const r = new FileReader();
+        r.onload = () => { addBrandedImage(r.result); setStatus("Знімок вставлено з буфера — відкрий «Сторінки», щоб розмістити."); };
+        r.readAsDataURL(f);
+        return;
+      }
+    }
+  });
   const pageBtn = document.getElementById("pageBtn");
   const pageModal = document.getElementById("pageModal");
   const pgWrap = document.getElementById("pgWrap");
