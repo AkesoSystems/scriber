@@ -328,6 +328,7 @@
 </div>
 
 <div class="modal" id="pageModal" aria-hidden="true">
+  <button class="pg-close" id="pgAddImg" type="button" style="right:auto;left:18px">+ Знімок</button>
   <button class="pg-close" id="pgClose" type="button">Закрити ✕</button>
   <div class="pg-wrap" id="pgWrap"></div>
 </div>
@@ -608,9 +609,10 @@
     el.style.left = (18 + off) + "px"; el.style.top = (6 + off) + "px"; el.style.zIndex = String(++imgSeq); el.style.width = "52%";
     el.innerHTML = '<img src="' + src + '" alt="рентген"><span class="bd-rz"></span><span class="bd-del">×</span>';
     canvas.appendChild(el);
-    el.querySelector("img").addEventListener("load", reflowCanvas);
+    el.querySelector("img").addEventListener("load", () => { reflowCanvas(); refreshPreviewIfOpen(); });
     wireImg(el, canvas, false);
     reflowCanvas();
+    refreshPreviewIfOpen();   // якщо «Сторінки» відкриті — одразу показати новий знімок там
   }
   if (imgBtn && imgFile){
     imgBtn.addEventListener("click", () => imgFile.click());
@@ -696,11 +698,15 @@
     pg.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
     return [pg];
   }
+  function renderSheetsInto(el){ const sheets = buildSheets(true); el.innerHTML = ""; sheets.forEach(s => el.appendChild(s)); return sheets.length; }
   function openPagePreview(){
-    const sheets = buildSheets(true); if (!sheets.length) return;   // interactive: знімки рухаються прямо в модалці
-    pgWrap.innerHTML = ""; sheets.forEach(s => pgWrap.appendChild(s));
+    if (!renderSheetsInto(pgWrap)) return;                          // interactive: знімки рухаються прямо в модалці
     pageModal.classList.add("show"); pageModal.setAttribute("aria-hidden", "false");
   }
+  // якщо «Сторінки» відкриті — перебудувати аркуші (новий знімок з'являється одразу, позиції з #doc збережені)
+  function refreshPreviewIfOpen(){ if (pageModal && pageModal.classList.contains("show")) renderSheetsInto(pgWrap); }
+  const pgAddImg = document.getElementById("pgAddImg");
+  if (pgAddImg && imgFile) pgAddImg.addEventListener("click", () => imgFile.click());
   function closePagePreview(){ pageModal.classList.remove("show"); pageModal.setAttribute("aria-hidden", "true"); pgWrap.innerHTML = ""; }
   if (pageBtn) pageBtn.addEventListener("click", openPagePreview);
   if (pgClose) pgClose.addEventListener("click", closePagePreview);
