@@ -258,6 +258,17 @@
      видимість лише через [hidden] (показуємо тільки demo через JS pasteWrap.hidden=false) */
   #pasteWrap{display:none}
   #pasteWrap:not([hidden]){display:flex;flex-direction:column;gap:6px}
+  /* Бібліотека готових заключень (модалка зі списком + пошук) */
+  .concl-card{max-width:660px;width:100%;text-align:left;padding:20px 20px 16px;max-height:84vh;display:flex;flex-direction:column;}
+  .concl-search{margin:12px 0 10px;width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
+  .concl-list{overflow-y:auto;flex:1 1 auto;display:flex;flex-direction:column;gap:3px;padding-right:2px;}
+  .concl-group{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--teal-dark);margin:12px 2px 2px;}
+  .concl-row{display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%;background:none;border:1px solid transparent;border-radius:8px;padding:8px 10px;cursor:pointer;font-family:inherit;}
+  .concl-row:hover{background:rgba(0,0,0,.04);border-color:var(--line);}
+  .concl-num{flex:0 0 auto;min-width:26px;height:22px;display:inline-flex;align-items:center;justify-content:center;background:var(--teal-dark);color:#fff;border-radius:6px;font-size:12px;font-weight:700;padding:0 6px;}
+  .concl-tx{font-size:13.5px;line-height:1.45;color:var(--ink);}
+  .concl-hint{font-size:12px;color:var(--muted);margin-top:10px;border-top:1px solid var(--line);padding-top:8px;}
+  @media (max-width:560px){ .concl-card{max-width:100%;max-height:90vh;padding:16px 14px 12px;} .concl-tx{font-size:13px;} }
 </style>
 </head>
 <body>
@@ -300,6 +311,7 @@
       <span class="doc-actions">
         <button id="imgBtn" class="btn-ghost" hidden title="Додати рентген-знімок">+ Знімок</button>
         <button id="pageBtn" class="btn-ghost" hidden title="Перегляд по сторінках (A4)">Сторінки</button>
+        <button id="conclBtn" class="btn-ghost" hidden title="Вставити готове заключення">Заключення</button>
         <button id="copyBtn" class="btn-ghost">Копіювати</button>
         <button id="docBtn" class="btn-ghost">Word</button>
         <button id="pdfBtn" class="btn-ghost">PDF</button>
@@ -331,6 +343,16 @@
   <button class="pg-close" id="pgAddImg" type="button" style="right:auto;left:18px">+ Знімок</button>
   <button class="pg-close" id="pgClose" type="button">Закрити ✕</button>
   <div class="pg-wrap" id="pgWrap"></div>
+</div>
+
+<div class="modal" id="conclModal" aria-hidden="true">
+  <div class="modal-card concl-card" role="dialog" aria-modal="true" aria-label="Готові заключення">
+    <button class="modal-x" id="conclClose" type="button" aria-label="Закрити">×</button>
+    <div class="modal-title">Готові заключення</div>
+    <input id="conclSearch" class="concl-search" type="search" placeholder="пошук: номер або слово…" autocomplete="off">
+    <div class="concl-list" id="conclList"></div>
+    <div class="concl-hint">Клік по пункту — вставити в протокол. Або голосом під час диктовки: «заключення номер 5».</div>
+  </div>
 </div>
 
 <div id="printArea" aria-hidden="true"></div>
@@ -843,7 +865,7 @@
       const r = await fetch("/api/protocol", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ text: finalText, uid, template: curTemplate(), fromText: !!fromText })
+        body: JSON.stringify({ text: stripVoiceCmd(finalText), uid, template: curTemplate(), fromText: !!fromText })
       });
       gotResponse = true;
       const data = await r.json();
@@ -855,6 +877,7 @@
       timerEl.textContent = "протокол за " + (ms/1000).toFixed(1).replace(".", ",") + " с · Scriber";
       doc.contentEditable = "true";          // чистовик редагований
       renderProtocolAnimated(data.html);     // ефект «оживання»: блоки з'являються по черзі
+      applyVoiceConclusions(finalText);      // голосові «заключення номер N» → у розділ «Заключення»
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
@@ -926,6 +949,7 @@
       if (!r.ok) return;
       const d = await r.json();
       renderTrial(d);
+      initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
       // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
       // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
       // лікарю мітка зайва (це його ж ім'я), показуємо лише назву шаблону.
@@ -1090,6 +1114,80 @@
     wipeDraft();
     showRating();
   });
+
+  // ══ Бібліотека готових заключень лікаря (клік зі списку + голос «заключення номер N») ══
+  const conclBtn = document.getElementById("conclBtn");
+  const conclModal = document.getElementById("conclModal");
+  const conclClose = document.getElementById("conclClose");
+  const conclList = document.getElementById("conclList");
+  const conclSearch = document.getElementById("conclSearch");
+  let CONCL = [];               // [{n,text}] — власна бібліотека лікаря (з /api/trial, own-only)
+  let lastDocRange = null;      // останній курсор у #doc (щоб вставити саме туди після відкриття модалки)
+  function cEsc(s){ return String(s).replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c])); }
+  function initConclusions(list){ CONCL = Array.isArray(list) ? list.slice() : []; if (CONCL.length){ renderConclList(""); conclBtn.hidden = false; } }
+  function renderConclList(q){
+    q = (q||"").trim().toLowerCase();
+    const rows = CONCL.filter(c => !q || String(c.n) === q || c.text.toLowerCase().includes(q))
+      .map(c => '<button type="button" class="concl-row" data-n="'+c.n+'"><span class="concl-num">'+c.n+'</span><span class="concl-tx">'+cEsc(c.text)+'</span></button>').join("");
+    conclList.innerHTML = rows || '<div class="concl-hint" style="border:0;margin:8px 2px">Нічого не знайдено</div>';
+  }
+  function openConcl(){
+    const s = window.getSelection();
+    if (s && s.rangeCount && doc.contains(s.getRangeAt(0).commonAncestorContainer)) lastDocRange = s.getRangeAt(0).cloneRange();
+    conclModal.classList.add("show"); conclModal.setAttribute("aria-hidden","false");
+    conclSearch.value = ""; renderConclList(""); setTimeout(() => conclSearch.focus(), 30);
+  }
+  function closeConcl(){ conclModal.classList.remove("show"); conclModal.setAttribute("aria-hidden","true"); }
+  function conclAnchorP(){                                   // абзац зі стемом заключення «…УЗ-ознаки:»
+    const root = exportRoot() || doc; const ps = root.querySelectorAll("p");
+    for (let i=0;i<ps.length;i++){ if (/УЗ-ознаки/.test(ps[i].textContent)) return ps[i]; }
+    return null;
+  }
+  function isFragment(t){ return !/^[А-ЯІЇЄҐA-Z]/.test(t.trim()); } // рядкова = продовження стему, велика = самостійне речення
+  function appendToStem(t){
+    const frag = t.trim().replace(/\s*;\s*$/,"");
+    const p = conclAnchorP();
+    if (p && isFragment(t)){
+      const after = (p.textContent.split(/УЗ-ознаки\s*:/)[1] || "").trim();
+      let html = p.innerHTML.replace(/\s*$/,"").replace(/\.\s*$/,"");   // приберемо кінцеву крапку, поставимо після фрагмента
+      p.innerHTML = html + (after ? "; " : " ") + frag + ".";
+      return true;
+    }
+    const np = document.createElement("p"); np.textContent = frag + (/[.!?]$/.test(frag) ? "" : ".");
+    (exportRoot() || doc).appendChild(np); return true;
+  }
+  function insertConclusion(c){
+    const t = c.text.trim();
+    if (lastDocRange && doc.contains(lastDocRange.commonAncestorContainer)){
+      try{
+        const r = lastDocRange.cloneRange(); r.collapse(false);
+        r.insertNode(document.createTextNode(" " + t)); lastDocRange = null;
+        saveDraft(); setStatus("Заключення № " + c.n + " вставлено в позицію курсора.", false); return;
+      }catch(_){ /* впаде — підемо у стем нижче */ }
+    }
+    appendToStem(t); saveDraft(); setStatus("Заключення № " + c.n + " додано в розділ «Заключення».", false);
+  }
+  // Голос: у транскрипті «(заключення|висновок) [номер|№] N» → вставити відповідні (після генерації).
+  function applyVoiceConclusions(transcript){
+    if (!CONCL.length || !transcript) return;
+    const re = /(?:заключенн\S*|висновк\S*|висновок)\s*(?:номер|№)?\s*(\d{1,3})/gi;
+    const byN = {}; CONCL.forEach(c => byN[c.n] = c);
+    let m, used = [];
+    while ((m = re.exec(transcript))){ const n = +m[1]; if (byN[n]){ appendToStem(byN[n].text); used.push(n); } }
+    if (used.length){ saveDraft(); setStatus("Голосом додано заключення № " + used.join(", ") + " — перевірте.", false); }
+  }
+  // Прибрати голосову команду з тексту, що йде в LLM (щоб «заключення номер N» не потрапило в опис).
+  function stripVoiceCmd(t){ return String(t).replace(/(?:заключенн\S*|висновк\S*|висновок)\s*(?:номер|№)?\s*\d{1,3}/gi, " "); }
+  if (conclBtn){
+    conclBtn.addEventListener("click", openConcl);
+    conclClose.addEventListener("click", closeConcl);
+    conclModal.addEventListener("click", e => { if (e.target === conclModal) closeConcl(); });
+    conclSearch.addEventListener("input", () => renderConclList(conclSearch.value));
+    conclList.addEventListener("click", e => {
+      const row = e.target.closest(".concl-row"); if (!row) return;
+      const c = CONCL.find(x => String(x.n) === row.dataset.n); if (c) insertConclusion(c);
+    });
+  }
 })();
 </script>
 </body>
