@@ -270,6 +270,7 @@
   .concl-hint{font-size:12px;color:var(--muted);margin-top:10px;border-top:1px solid var(--line);padding-top:8px;}
   .concl-toast{min-height:15px;font-size:12.5px;font-weight:600;color:#1e9e78;margin:2px 2px 0;opacity:0;transition:opacity .18s;}
   .concl-toast.show{opacity:1;}
+  .concl-toast.warn{color:#b26a00;}
   .concl-row.added{background:rgba(30,158,120,.10);}
   .concl-row.added .concl-num{background:#1e9e78;}
   .concl-row.added::after{content:"✓";margin-left:auto;align-self:center;color:#1e9e78;font-weight:700;padding-left:8px;}
@@ -1138,10 +1139,15 @@
       .map(c => '<button type="button" class="concl-row'+(addedNs.has(c.n)?' added':'')+'" data-n="'+c.n+'"><span class="concl-num">'+c.n+'</span><span class="concl-tx">'+cEsc(c.text)+'</span></button>').join("");
     conclList.innerHTML = rows || '<div class="concl-hint" style="border:0;margin:8px 2px">Нічого не знайдено</div>';
   }
+  function refreshAdded(){                                   // які заключення ВЖЕ присутні в протоколі (щоб не дублювати)
+    addedNs.clear();
+    const txt = (exportRoot() || doc).textContent || "";
+    CONCL.forEach(c => { const probe = c.text.trim().replace(/\s*;\s*$/,""); if (probe.length >= 12 && txt.indexOf(probe) !== -1) addedNs.add(c.n); });
+  }
   function openConcl(){
-    addedNs.clear();                                        // нова сесія вставки → скидаємо ✓-позначки
+    refreshAdded();                                          // позначити ✓ ті, що вже в протоколі
     conclModal.classList.add("show"); conclModal.setAttribute("aria-hidden","false");
-    conclSearch.value = ""; renderConclList(""); if (conclToast) conclToast.classList.remove("show");
+    conclSearch.value = ""; renderConclList(""); if (conclToast) conclToast.classList.remove("show","warn");
     setTimeout(() => conclSearch.focus(), 30);
   }
   function closeConcl(){ conclModal.classList.remove("show"); conclModal.setAttribute("aria-hidden","true"); }
@@ -1188,7 +1194,14 @@
     conclList.addEventListener("click", e => {
       const row = e.target.closest(".concl-row"); if (!row) return;
       const c = CONCL.find(x => String(x.n) === row.dataset.n); if (!c) return;
+      if (addedNs.has(c.n)){                                 // вже в протоколі → не дублюємо
+        conclToast.textContent = "Заключення № " + c.n + " вже додано";
+        conclToast.classList.add("show", "warn");
+        clearTimeout(conclToast._t); conclToast._t = setTimeout(() => conclToast.classList.remove("show", "warn"), 1800);
+        return;
+      }
       insertConclusion(c); addedNs.add(c.n); row.classList.add("added");
+      conclToast.classList.remove("warn");
       conclToast.textContent = "✓ Заключення № " + c.n + " додано";
       conclToast.classList.add("show");
       clearTimeout(conclToast._t); conclToast._t = setTimeout(() => conclToast.classList.remove("show"), 1800);
