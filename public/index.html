@@ -268,6 +268,11 @@
   .concl-num{flex:0 0 auto;min-width:26px;height:22px;display:inline-flex;align-items:center;justify-content:center;background:var(--teal-dark);color:#fff;border-radius:6px;font-size:12px;font-weight:700;padding:0 6px;}
   .concl-tx{font-size:13.5px;line-height:1.45;color:var(--ink);}
   .concl-hint{font-size:12px;color:var(--muted);margin-top:10px;border-top:1px solid var(--line);padding-top:8px;}
+  .concl-toast{min-height:15px;font-size:12.5px;font-weight:600;color:#1e9e78;margin:2px 2px 0;opacity:0;transition:opacity .18s;}
+  .concl-toast.show{opacity:1;}
+  .concl-row.added{background:rgba(30,158,120,.10);}
+  .concl-row.added .concl-num{background:#1e9e78;}
+  .concl-row.added::after{content:"✓";margin-left:auto;align-self:center;color:#1e9e78;font-weight:700;padding-left:8px;}
   @media (max-width:560px){ .concl-card{max-width:100%;max-height:90vh;padding:16px 14px 12px;} .concl-tx{font-size:13px;} }
 </style>
 </head>
@@ -350,8 +355,9 @@
     <button class="modal-x" id="conclClose" type="button" aria-label="Закрити">×</button>
     <div class="modal-title">Готові заключення</div>
     <input id="conclSearch" class="concl-search" type="search" placeholder="пошук: номер або слово…" autocomplete="off">
+    <div class="concl-toast" id="conclToast"></div>
     <div class="concl-list" id="conclList"></div>
-    <div class="concl-hint">Клік по пункту — вставити в протокол. Або голосом під час диктовки: «заключення номер 5».</div>
+    <div class="concl-hint">Клік — додати в «Заключення» (можна кілька поспіль), тоді закрийте ✕. Або голосом під час диктовки: «заключення номер 5».</div>
   </div>
 </div>
 
@@ -1121,21 +1127,22 @@
   const conclClose = document.getElementById("conclClose");
   const conclList = document.getElementById("conclList");
   const conclSearch = document.getElementById("conclSearch");
+  const conclToast = document.getElementById("conclToast");
   let CONCL = [];               // [{n,text}] — власна бібліотека лікаря (з /api/trial, own-only)
-  let lastDocRange = null;      // останній курсор у #doc (щоб вставити саме туди після відкриття модалки)
+  const addedNs = new Set();    // номери, додані в поточній сесії модалки (для ✓-позначки й лічильника)
   function cEsc(s){ return String(s).replace(/[&<>]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;" }[c])); }
   function initConclusions(list){ CONCL = Array.isArray(list) ? list.slice() : []; if (CONCL.length){ renderConclList(""); conclBtn.hidden = false; } }
   function renderConclList(q){
     q = (q||"").trim().toLowerCase();
     const rows = CONCL.filter(c => !q || String(c.n) === q || c.text.toLowerCase().includes(q))
-      .map(c => '<button type="button" class="concl-row" data-n="'+c.n+'"><span class="concl-num">'+c.n+'</span><span class="concl-tx">'+cEsc(c.text)+'</span></button>').join("");
+      .map(c => '<button type="button" class="concl-row'+(addedNs.has(c.n)?' added':'')+'" data-n="'+c.n+'"><span class="concl-num">'+c.n+'</span><span class="concl-tx">'+cEsc(c.text)+'</span></button>').join("");
     conclList.innerHTML = rows || '<div class="concl-hint" style="border:0;margin:8px 2px">Нічого не знайдено</div>';
   }
   function openConcl(){
-    const s = window.getSelection();
-    if (s && s.rangeCount && doc.contains(s.getRangeAt(0).commonAncestorContainer)) lastDocRange = s.getRangeAt(0).cloneRange();
+    addedNs.clear();                                        // нова сесія вставки → скидаємо ✓-позначки
     conclModal.classList.add("show"); conclModal.setAttribute("aria-hidden","false");
-    conclSearch.value = ""; renderConclList(""); setTimeout(() => conclSearch.focus(), 30);
+    conclSearch.value = ""; renderConclList(""); if (conclToast) conclToast.classList.remove("show");
+    setTimeout(() => conclSearch.focus(), 30);
   }
   function closeConcl(){ conclModal.classList.remove("show"); conclModal.setAttribute("aria-hidden","true"); }
   function conclAnchorP(){                                   // абзац зі стемом заключення «…УЗ-ознаки:»
@@ -1156,16 +1163,11 @@
     const np = document.createElement("p"); np.textContent = frag + (/[.!?]$/.test(frag) ? "" : ".");
     (exportRoot() || doc).appendChild(np); return true;
   }
+  // Кожне заключення дописується в розділ «Заключення» (фрагмент — після «УЗ-ознаки:», повне речення —
+  // окремим абзацом). Модалка лишається відкритою, тож лікар може додати кілька поспіль.
   function insertConclusion(c){
-    const t = c.text.trim();
-    if (lastDocRange && doc.contains(lastDocRange.commonAncestorContainer)){
-      try{
-        const r = lastDocRange.cloneRange(); r.collapse(false);
-        r.insertNode(document.createTextNode(" " + t)); lastDocRange = null;
-        saveDraft(); setStatus("Заключення № " + c.n + " вставлено в позицію курсора.", false); return;
-      }catch(_){ /* впаде — підемо у стем нижче */ }
-    }
-    appendToStem(t); saveDraft(); setStatus("Заключення № " + c.n + " додано в розділ «Заключення».", false);
+    appendToStem(c.text); saveDraft();
+    setStatus("Заключення № " + c.n + " додано в розділ «Заключення».", false);
   }
   // Голос: у транскрипті «(заключення|висновок) [номер|№] N» → вставити відповідні (після генерації).
   function applyVoiceConclusions(transcript){
@@ -1185,7 +1187,11 @@
     conclSearch.addEventListener("input", () => renderConclList(conclSearch.value));
     conclList.addEventListener("click", e => {
       const row = e.target.closest(".concl-row"); if (!row) return;
-      const c = CONCL.find(x => String(x.n) === row.dataset.n); if (c) insertConclusion(c);
+      const c = CONCL.find(x => String(x.n) === row.dataset.n); if (!c) return;
+      insertConclusion(c); addedNs.add(c.n); row.classList.add("added");
+      conclToast.textContent = "✓ Заключення № " + c.n + " додано";
+      conclToast.classList.add("show");
+      clearTimeout(conclToast._t); conclToast._t = setTimeout(() => conclToast.classList.remove("show"), 1800);
     });
   }
 })();
