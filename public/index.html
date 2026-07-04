@@ -1151,18 +1151,21 @@
     setTimeout(() => conclSearch.focus(), 30);
   }
   function closeConcl(){ conclModal.classList.remove("show"); conclModal.setAttribute("aria-hidden","true"); }
-  function conclAnchorP(){                                   // абзац зі стемом заключення «…УЗ-ознаки:»
+  function conclAnchorP(){                                   // абзац-СТЕМ заключення «…на момент дослідження УЗ-ознаки:»
     const root = exportRoot() || doc; const ps = root.querySelectorAll("p");
-    for (let i=0;i<ps.length;i++){ if (/УЗ-ознаки/.test(ps[i].textContent)) return ps[i]; }
+    // ключ — ДВОКРАПКА після «УЗ-ознаки»: вона є лише в стемі, а не в «УЗ-ознаки сторонніх тіл…»
+    for (let i=0;i<ps.length;i++){ if (/УЗ-ознаки\s*:/.test(ps[i].textContent)) return ps[i]; }
+    // запасне: перший абзац із «Заключення»/«Висновок» (у DOM стем іде раніше за дисклеймер)
+    for (let i=0;i<ps.length;i++){ if (/Заключенн|Висновок/i.test(ps[i].textContent)) return ps[i]; }
     return null;
   }
   function isFragment(t){ return !/^[А-ЯІЇЄҐA-Z]/.test(t.trim()); } // рядкова = продовження стему, велика = самостійне речення
   function appendToStem(t){
-    const frag = t.trim().replace(/\s*;\s*$/,"");
+    const frag = t.trim().replace(/[;.\s]+$/,"");                       // прибрати кінцеві « ; . » — крапку поставимо самі
     const p = conclAnchorP();
     if (p && isFragment(t)){
       const after = (p.textContent.split(/УЗ-ознаки\s*:/)[1] || "").trim();
-      let html = p.innerHTML.replace(/\s*$/,"").replace(/\.\s*$/,"");   // приберемо кінцеву крапку, поставимо після фрагмента
+      let html = p.innerHTML.replace(/\s*$/,"").replace(/[;.]\s*$/,"");   // приберемо кінцеву « ; . », поставимо після фрагмента
       p.innerHTML = html + (after ? "; " : " ") + frag + ".";
       return true;
     }

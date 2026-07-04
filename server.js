@@ -2437,6 +2437,20 @@ app.post("/api/admin/regen-skeletons", (req, res) => {
 // Живе прев'ю заповнення шаблону ПІД ЧАС диктовки. Швидка/дешева модель (Nova).
 // Best-effort: НЕ логуємо як generate_ok (щоб не накручувати лічильник протоколів),
 // без ланцюга-резерву — це лише чернетка, чистовик дає /api/protocol (Sonnet) на стопі.
+// Санітизація виводу LLM: моделі іноді додають РОЗДУМ/аналіз ПЕРЕД HTML або пояснення ПІСЛЯ нього
+// (напр. «Аналізую диктовку: …» / «I need to carefully parse…»), попри інструкцію «виводь лише HTML».
+// Відрізаємо все до першого блокового тега і хвіст після останнього закривного — у документ потрапляє
+// ЛИШЕ чистий HTML-фрагмент. Діє для всіх шаблонів і провайдерів (Nova прев'ю / Sonnet чистовик).
+function sanitizeProtocolHtml(html){
+  if (typeof html !== "string") return html;
+  let s = html.trim().replace(/^```(?:html)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const m = s.match(/<(?:div|p|h1|h2|h3|table|section|ul|ol)[\s>]/i);
+  if (m && m.index > 0) s = s.slice(m.index);                 // відкинути преамбулу-роздум перед HTML
+  const last = s.lastIndexOf(">");
+  if (last !== -1 && last < s.length - 1) s = s.slice(0, last + 1);  // відкинути хвіст після HTML
+  return s.trim();
+}
+
 app.post("/api/autofill", async (req, res) => {
   if (!bedrock) return res.status(503).json({ error: "no_provider" });
   const raw = (req.body && req.body.text || "").trim();
@@ -2445,7 +2459,7 @@ app.post("/api/autofill", async (req, res) => {
   if (trialState(user).expired) return res.status(403).json({ trialExpired: true });
   const systemPrompt = promptFor(user, req.body && req.body.template);
   try {
-    const html = await protocolViaBedrock(systemPrompt, raw, BEDROCK_MODEL); // Nova — швидке прев'ю
+    const html = sanitizeProtocolHtml(await protocolViaBedrock(systemPrompt, raw, BEDROCK_MODEL)); // Nova — швидке прев'ю
     res.json({ html });
   } catch (e) {
     res.status(502).json({ error: (e && e.code) || "unknown" });
@@ -2497,7 +2511,7 @@ app.post("/api/protocol", async (req, res) => {
     const step = chain[i];
     const t0 = Date.now();
     try {
-      const html = await step.run(systemPrompt, raw);
+      const html = sanitizeProtocolHtml(await step.run(systemPrompt, raw));
       const ms = Date.now() - t0;
       logEvent(uid, "generate_ok", Math.round(ms / 1000), user,
         { provider: step.provider, model: step.model, stage: "generate", ms, fallback });
