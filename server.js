@@ -288,7 +288,43 @@ app.get("/api/trial", (req, res) => {
   const quota = PROTOCOL_QUOTA_BY_USER[user];
   const usage = quota ? { protocolQuota: quota, protocolsUsed: protocolsUsed(user) } : {};
   const conclusions = CONCLUSIONS_BY_USER[user] || null;  // бібліотека готових заключень (own-only)
-  res.json(Object.assign({ user, isNeutral, canPick, templates, primary, conclusions }, trialState(user), usage));
+  const beam = BEAM_USERS.has(user) || isNeutral;         // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
+  res.json(Object.assign({ user, isNeutral, canPick, templates, primary, conclusions, beam }, trialState(user), usage));
+});
+
+// ── Ефемерний «beam» телефон→комп У МЕЖАХ ОДНОГО акаунта (той самий Basic Auth-логін) ──
+// Роксоляна (test8) диктує з телефона й доводить на комп'ютері. Клінічний текст свідомо тримаємо
+// ЛИШЕ в пам'яті: без диска, без логів, короткий TTL і single-use (перше ж отримання стирає) — щоб
+// не порушувати PHI-firewall (нуль клінічного тексту на диску/в аналітиці). Ключ = логін акаунта.
+const BEAM_USERS = new Set(["test8"]);      // кому показуємо синк (нейтральні/demo вмикаються окремо, для прев'ю)
+const BEAM_TTL_MS = 5 * 60 * 1000;          // 5 хв — «пару хвилин», щоб встигнути перейти на комп
+const beamStore = new Map();                 // user → { t, dictation, protocol }
+function beamSweep() {                        // прибирання протухлих (якщо ніхто не забрав)
+  const now = Date.now();
+  for (const [u, v] of beamStore) if (!v || now - v.t > BEAM_TTL_MS) beamStore.delete(u);
+}
+const beamTimer = setInterval(beamSweep, 60 * 1000);
+if (beamTimer.unref) beamTimer.unref();      // не тримати процес живим лише заради підмітання
+
+// Телефон кладе поточну диктовку+протокол під свій акаунт. Перезапис — останній виграє.
+app.post("/api/beam", (req, res) => {
+  const user = getAuthUser(req);
+  if (user === "невідомо") return res.status(401).json({ error: "no_auth" });
+  const dictation = String((req.body && req.body.dictation) || "").slice(0, 100000);
+  const protocol  = String((req.body && req.body.protocol)  || "").slice(0, 400000);
+  if (!dictation && !protocol) return res.status(400).json({ error: "empty" });
+  beamStore.set(user, { t: Date.now(), dictation, protocol });
+  res.json({ ok: true, ttlMs: BEAM_TTL_MS });
+});
+
+// Комп забирає (single-use): віддали й одразу стерли — клінічний текст не залежується в пам'яті.
+app.get("/api/beam", (req, res) => {
+  const user = getAuthUser(req);
+  if (user === "невідомо") return res.status(401).json({ error: "no_auth" });
+  const v = beamStore.get(user);
+  beamStore.delete(user);                    // забрали або протухло — в обох випадках чистимо
+  if (!v || Date.now() - v.t > BEAM_TTL_MS) return res.json({ empty: true });
+  res.json({ dictation: v.dictation, protocol: v.protocol, t: v.t });
 });
 
 // ── Адмін-керування періодом (за ADMIN_KEY): продовжити (+дні) / скинути ──

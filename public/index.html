@@ -299,6 +299,7 @@
     <div class="wave" id="wave" aria-hidden="true"></div>
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
+      <button id="beamRecvBtn" class="btn-ghost" hidden title="Підтягнути диктовку/протокол, надіслані з телефона під цим акаунтом">💻 З телефона</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
@@ -318,6 +319,7 @@
         <button id="imgBtn" class="btn-ghost" hidden title="Додати рентген-знімок">+ Знімок</button>
         <button id="pageBtn" class="btn-ghost" hidden title="Перегляд по сторінках (A4)">Сторінки</button>
         <button id="conclBtn" class="btn-ghost" hidden title="Вставити готове заключення">Заключення</button>
+        <button id="beamSendBtn" class="btn-ghost" hidden title="Надіслати диктовку+протокол на комп'ютер під цим акаунтом (діє ~5 хв)">📲 На комп</button>
         <button id="copyBtn" class="btn-ghost">Копіювати</button>
         <button id="docBtn" class="btn-ghost">Word</button>
         <button id="pdfBtn" class="btn-ghost">PDF</button>
@@ -820,6 +822,7 @@
     mediaRec.start(1000);                              // дані щосекунди (страховка від втрати при краху)
     startWave(micStream);
     recording = true;
+    acquireWakeLock();                                 // екран не гасне, поки диктують (важливо на телефоні)
     recStartedAt = Date.now();
     track("rec_start");
     recBtn.classList.add("recording");
@@ -834,6 +837,7 @@
   function stopRec(){
     if (!recording) return;
     recording = false;
+    releaseWakeLock();                                 // запис зупинено — відпускаємо екран
     stopWave();
     if (recStartedAt){ lastRecDur = Date.now() - recStartedAt; track("rec_stop", Math.round(lastRecDur / 1000)); recStartedAt = 0; }
     if (recTimer){ clearInterval(recTimer); recTimer = null; }
@@ -856,6 +860,63 @@
     doc.innerHTML = ""; showFlagNav(); render(); wipeDraft();   // чистимо й протокол → новий пацієнт не успадкує старий
     lastSkeletonTmpl = null; showSkeleton(true);                // показати порожній бланк знову
   });
+
+  // ── Екран не гасне під час запису (Screen Wake Lock) — критично для диктовки з телефона ──
+  // Мобільні скидають lock при згортанні вкладки → пере-запитуємо на visibilitychange, поки триває запис.
+  let wakeLock = null;
+  async function acquireWakeLock(){
+    try{
+      if ("wakeLock" in navigator && !wakeLock){
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+      }
+    }catch(_){ /* відмова/непідтримка — не критично, запис триває */ }
+  }
+  async function releaseWakeLock(){ try{ if (wakeLock){ await wakeLock.release(); } }catch(_){} finally{ wakeLock = null; } }
+  document.addEventListener("visibilitychange", () => {
+    if (recording && document.visibilityState === "visible") acquireWakeLock();
+  });
+
+  // ── Beam: ефемерний перенос диктовки+протоколу телефон→комп у межах ОДНОГО акаунта ──
+  // Телефон кладе під свій логін (сервер, TTL ~5хв, single-use), комп забирає тією ж кнопкою-акаунтом.
+  const beamSendBtn = document.getElementById("beamSendBtn");
+  const beamRecvBtn = document.getElementById("beamRecvBtn");
+  function currentBeamPayload(){
+    const dictation = (finalText + (finalText && liveText ? " " : "") + liveText).trim();
+    const bodyEl = doc.querySelector(".branded-doc .bd-body");                 // брендований: лише тіло (без печатки/підпису)
+    const protocol = (bodyEl ? bodyEl.innerHTML : doc.innerHTML).trim();
+    return { dictation, protocol };
+  }
+  async function beamSend(){
+    const { dictation, protocol } = currentBeamPayload();
+    if (!dictation && !protocol){ setStatus("Немає що надсилати — спершу продиктуйте або сформуйте протокол.", true); return; }
+    beamSendBtn.disabled = true;
+    try{
+      const r = await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dictation, protocol }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "fail");
+      const mins = Math.round((d.ttlMs || 300000) / 60000);
+      setStatus("Надіслано на ваш акаунт. Відкрийте Scriber на комп'ютері під тим самим логіном і натисніть «💻 З телефона» протягом " + mins + " хв.");
+    }catch(_){ setStatus("Не вдалося надіслати. Спробуйте ще раз.", true); }
+    finally{ beamSendBtn.disabled = false; }
+  }
+  async function beamReceive(){
+    if (recording){ setStatus("Спершу зупиніть запис, тоді отримуйте.", true); return; }
+    beamRecvBtn.disabled = true;
+    try{
+      const r = await fetch("/api/beam", { cache:"no-store" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "fail");
+      if (d.empty){ setStatus("З телефона поки нічого немає. Надішліть на телефоні кнопкою «📲 На комп».", true); return; }
+      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
+      if (d.protocol){ renderProtocolHtml(d.protocol); }
+      saveDraft();
+      setStatus("Отримано з телефона. Перевірте текст перед формуванням / експортом.");
+    }catch(_){ setStatus("Не вдалося отримати. Спробуйте ще раз.", true); }
+    finally{ beamRecvBtn.disabled = false; }
+  }
+  if (beamSendBtn) beamSendBtn.addEventListener("click", beamSend);
+  if (beamRecvBtn) beamRecvBtn.addEventListener("click", beamReceive);
 
   // Формування протоколу: Sonnet → анімований рендер. Викликається авто на стопі ТА кнопкою.
   async function generateProtocol(fromText){
@@ -957,6 +1018,10 @@
       const d = await r.json();
       renderTrial(d);
       initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
+      if (d.beam){                          // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
+        if (beamSendBtn) beamSendBtn.hidden = false;
+        if (beamRecvBtn) beamRecvBtn.hidden = false;
+      }
       // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
       // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
       // лікарю мітка зайва (це його ж ім'я), показуємо лише назву шаблону.
