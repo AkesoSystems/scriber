@@ -30,7 +30,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "public")));
+// HTML не кешуємо — щоб деплої одразу доходили на всі пристрої (телефон+комп мали різні версії з кешу).
+app.use(express.static(path.join(__dirname, "public"), {
+  setHeaders(res, filePath){
+    if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-store, must-revalidate");
+  }
+}));
 
 // ───────────────────────── Аналітика ─────────────────────────
 // Пишемо ЛИШЕ події і числа (тривалість, час генерації, оцінка).
