@@ -134,19 +134,6 @@
   #doc *{max-width:100%;}
   #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст перед копіюванням.";
     color:var(--faint);}
-  /* ── Індикатор очікування протоколу з телефона (лише на компі): вузька смужка над шаблоном ── */
-  .beam-wait{display:none;align-items:center;gap:10px;padding:11px 18px;
-    background:var(--teal-soft);color:var(--teal-dark);font-size:13px;letter-spacing:.02em;
-    border-bottom:1px solid var(--line-soft);}
-  .beam-wait.show{display:flex;}
-  .beam-wait .spin{flex:none;width:17px;height:17px;border:2px solid rgba(0,0,0,.12);border-top-color:var(--teal);
-    border-radius:50%;animation:beamspin .8s linear infinite;}
-  .beam-wait.ready{background:#fff4d6;color:#7a5b00;border-bottom-color:#e9d9a0;font-weight:600;}
-  .beam-accept{margin-left:auto;flex:none;padding:7px 15px;font-size:12px;font-weight:700;letter-spacing:.06em;
-    text-transform:uppercase;border:0;border-radius:8px;background:var(--teal);color:#fff;cursor:pointer;}
-  .beam-accept:hover{background:var(--teal-dark);}
-  @keyframes beamspin{to{transform:rotate(360deg)}}
-  @media(prefers-reduced-motion:reduce){.beam-wait .spin{animation:none}}
   #doc h2{font-size:20px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 20px;}
   #doc h3{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dark);font-weight:700;
     border-bottom:1px solid var(--ink);padding-bottom:6px;margin:24px 0 10px;}
@@ -312,6 +299,7 @@
     <div class="wave" id="wave" aria-hidden="true"></div>
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
+      <button id="beamRecvBtn" class="btn-ghost" hidden title="Підтягнути диктовку/протокол, надіслані з телефона під цим акаунтом">💻 З телефона</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
@@ -331,6 +319,7 @@
         <button id="imgBtn" class="btn-ghost" hidden title="Додати рентген-знімок">+ Знімок</button>
         <button id="pageBtn" class="btn-ghost" hidden title="Перегляд по сторінках (A4)">Сторінки</button>
         <button id="conclBtn" class="btn-ghost" hidden title="Вставити готове заключення">Заключення</button>
+        <button id="beamSendBtn" class="btn-ghost" hidden title="Надіслати диктовку+протокол на комп'ютер під цим акаунтом (діє ~5 хв)">📲 На комп</button>
         <button id="copyBtn" class="btn-ghost">Копіювати</button>
         <button id="docBtn" class="btn-ghost">Word</button>
         <button id="pdfBtn" class="btn-ghost">PDF</button>
@@ -338,11 +327,6 @@
       <input type="file" id="imgFile" accept="image/*" hidden multiple>
     </div>
     <div class="prog" id="progWrap"><span class="prog-bar" id="progBar"></span></div>
-    <div id="beamWait" class="beam-wait">
-      <span class="spin" aria-hidden="true"></span>
-      <span class="beam-msg">📲 Очікую протокол із телефона — сформуйте його там…</span>
-      <button id="beamAcceptBtn" class="beam-accept" type="button" hidden>Прийняти протокол</button>
-    </div>
     <div id="doc" contenteditable="true" spellcheck="true"></div>
     <div class="flagnav" id="flagNav">
       <span class="fn-count" id="flagCount"></span>
@@ -470,7 +454,6 @@
     bar.hidden = false;
     document.getElementById("draftRestore").onclick = () => {
       if (recording) return;   // не затирати live-стан під час активного запису
-      if (typeof showBeamWait === "function") showBeamWait(false);   // відновлюємо чернетку → прибираємо спінер очікування
       if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
       if (d.protocol){ renderProtocolHtml(d.protocol); }   // бренд-аварно: обгортає у рамку, якщо шаблон брендований
       bar.hidden = true;
@@ -828,7 +811,6 @@
       return;
     }
     finalText = ""; recChunks = [];
-    if (typeof showBeamWait === "function") showBeamWait(false);   // почали запис на цьому пристрої → прибираємо анімацію очікування
     flagNav.classList.remove("show"); doc.contentEditable = "false";
     showSkeleton(true);                                // порожній бланк видно під час запису
     const mime = pickMime();
@@ -895,80 +877,46 @@
     if (recording && document.visibilityState === "visible") acquireWakeLock();
   });
 
-  // ── Beam: синк протоколу між пристроями ОДНОГО акаунта (той самий Basic Auth логін). ──
-  // Хто сформував протокол — той тихо надсилає його під логін (сервер, TTL ~5хв, single-use);
-  // інший відкритий пристрій сам опитує й показує його. Надсилання — з будь-якого пристрою
-  // (працює і для двох вкладок), а спінер-очікування — лише на компі (телефон = вказівник coarse/тач).
-  const isPhone = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-  let beamOn = false;                                          // фіча ввімкнена для акаунта (test8 + demo)
-  let beamMuteUntil = 0;                                       // після свого надсилання ~мить не «крадемо» власний пакет назад
+  // ── Beam: ефемерний перенос диктовки+протоколу телефон→комп у межах ОДНОГО акаунта ──
+  // Телефон кладе під свій логін (сервер, TTL ~5хв, single-use), комп забирає тією ж кнопкою-акаунтом.
+  const beamSendBtn = document.getElementById("beamSendBtn");
+  const beamRecvBtn = document.getElementById("beamRecvBtn");
   function currentBeamPayload(){
     const dictation = (finalText + (finalText && liveText ? " " : "") + liveText).trim();
     const bodyEl = doc.querySelector(".branded-doc .bd-body");                 // брендований: лише тіло (без печатки/підпису)
     const protocol = (bodyEl ? bodyEl.innerHTML : doc.innerHTML).trim();
     return { dictation, protocol };
   }
-  async function beamSend(){                                   // тихо, без UI — після формування протоколу шле його на інший пристрій
+  async function beamSend(){
     const { dictation, protocol } = currentBeamPayload();
-    if (!dictation && !protocol) return;
-    beamMuteUntil = Date.now() + 12000;                       // ~12с не забираємо власний пакет — хай його візьме інший пристрій
+    if (!dictation && !protocol){ setStatus("Немає що надсилати — спершу продиктуйте або сформуйте протокол.", true); return; }
+    beamSendBtn.disabled = true;
     try{
-      await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dictation, protocol }) });
-    }catch(_){ /* збій мережі — не критично, протокол уже тут */ }
+      const r = await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dictation, protocol }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "fail");
+      const mins = Math.round((d.ttlMs || 300000) / 60000);
+      setStatus("Надіслано на ваш акаунт. Відкрийте Scriber на комп'ютері під тим самим логіном і натисніть «💻 З телефона» протягом " + mins + " хв.");
+    }catch(_){ setStatus("Не вдалося надіслати. Спробуйте ще раз.", true); }
+    finally{ beamSendBtn.disabled = false; }
   }
-
-  // Приймач (комп): смужка-індикатор над шаблоном. Спершу «Очікую…», а на прилітання —
-  // «Прийняти протокол» (юзер тисне, і протокол зʼявляється). GET single-use → тримаємо пакет у пам'яті.
-  const beamWait = document.getElementById("beamWait");
-  const beamMsg = beamWait ? beamWait.querySelector(".beam-msg") : null;
-  const beamSpin = beamWait ? beamWait.querySelector(".spin") : null;
-  const beamAcceptBtn = document.getElementById("beamAcceptBtn");
-  let beamPending = null;                                      // прийнятий, але ще не застосований пакет із телефона
-  function beamHide(){ if (beamWait) beamWait.classList.remove("show","ready"); beamPending = null; }
-  function beamWaiting(){                                      // стан «очікую протокол з телефона»
-    if (!beamWait) return;
-    beamPending = null;
-    if (beamSpin) beamSpin.style.display = "";
-    if (beamMsg) beamMsg.textContent = "📲 Очікую протокол із телефона — сформуйте його там…";
-    if (beamAcceptBtn) beamAcceptBtn.hidden = true;
-    beamWait.classList.remove("ready"); beamWait.classList.add("show");
-  }
-  function beamReady(d){                                       // прилетіло → показуємо кнопку «Прийняти протокол»
-    beamPending = d;
-    if (!beamWait) return;
-    if (beamSpin) beamSpin.style.display = "none";
-    if (beamMsg) beamMsg.textContent = "📲 Протокол із телефона готовий";
-    if (beamAcceptBtn) beamAcceptBtn.hidden = false;
-    beamWait.classList.add("show","ready");
-  }
-  function showBeamWait(on){ if (on) beamWaiting(); else beamHide(); }   // сумісність зі старими викликами (запис/чернетка)
-  function applyBeam(d){                                       // застосувати пакет: показати протокол (або сформувати з диктовки)
-    if (!d) return;
-    if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
-    if (d.protocol){ renderProtocolHtml(d.protocol); saveDraft(); setStatus("📲 Протокол із телефона прийнято."); }
-    else if (d.dictation){ saveDraft(); setStatus("📲 Диктовку з телефона прийнято — формую протокол…"); generateProtocol(); }
-  }
-  if (beamAcceptBtn) beamAcceptBtn.addEventListener("click", () => { const d = beamPending; beamHide(); applyBeam(d); });
-  let beamPollTimer = null;
-  async function beamPoll(){
-    if (recording || document.hidden) return;                 // не заважаємо запису; пауза коли вкладка прихована
-    if (Date.now() < beamMuteUntil) return;                   // щойно самі надіслали → не забираємо власний пакет
-    if (beamPending) return;                                   // вже є непринятий пакет — чекаємо на «Прийняти»
+  async function beamReceive(){
+    if (recording){ setStatus("Спершу зупиніть запис, тоді отримуйте.", true); return; }
+    beamRecvBtn.disabled = true;
     try{
       const r = await fetch("/api/beam", { cache:"no-store" });
       const d = await r.json();
-      if (!r.ok || d.empty) return;
-      beamReady(d);                                            // показуємо кнопку «Прийняти протокол»
-      setStatus("📲 Прийшов протокол із телефона — натисніть «Прийняти протокол».");
-    }catch(_){ /* тимчасова помилка мережі — наступний тік спробує знову */ }
+      if (!r.ok) throw new Error(d.error || "fail");
+      if (d.empty){ setStatus("З телефона поки нічого немає. Надішліть на телефоні кнопкою «📲 На комп».", true); return; }
+      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
+      if (d.protocol){ renderProtocolHtml(d.protocol); }
+      saveDraft();
+      setStatus("Отримано з телефона. Перевірте текст перед формуванням / експортом.");
+    }catch(_){ setStatus("Не вдалося отримати. Спробуйте ще раз.", true); }
+    finally{ beamRecvBtn.disabled = false; }
   }
-  function startBeamPolling(){
-    if (beamPollTimer) return;
-    beamWaiting();                                             // приймач одразу показує смужку «Очікую…»
-    beamPollTimer = setInterval(beamPoll, 2500);
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) beamPoll(); });
-    beamPoll();                                                // одразу перевірити (раптом диктовка вже чекає)
-  }
+  if (beamSendBtn) beamSendBtn.addEventListener("click", beamSend);
+  if (beamRecvBtn) beamRecvBtn.addEventListener("click", beamReceive);
 
   // Формування протоколу: Sonnet → анімований рендер. Викликається авто на стопі ТА кнопкою.
   async function generateProtocol(fromText){
@@ -1000,7 +948,6 @@
       applyVoiceConclusions(finalText);      // голосові «заключення номер N» → у розділ «Заключення»
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
-      if (beamOn) beamSend();               // сформований протокол одразу летить на інший пристрій під тим самим логіном
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік (TRIAL_DAYS) → оновлюємо лічильник
       setStatus(flagCnt
@@ -1071,9 +1018,9 @@
       const d = await r.json();
       renderTrial(d);
       initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
-      if (d.beam){                          // синк між пристроями (test8 + нейтральні/demo для прев'ю)
-        beamOn = true;
-        if (!isPhone) startBeamPolling();   // комп (приймач) опитує й показує «Прийняти»; телефон лише надсилає після формування
+      if (d.beam){                          // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
+        if (beamSendBtn) beamSendBtn.hidden = false;
+        if (beamRecvBtn) beamRecvBtn.hidden = false;
       }
       // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
       // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
