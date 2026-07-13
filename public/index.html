@@ -134,17 +134,15 @@
   #doc *{max-width:100%;}
   #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст перед копіюванням.";
     color:var(--faint);}
-  /* ── Очікування протоколу з телефона (на компі): спінер + пульсуючий текст ── */
-  .beam-wait{display:none;flex-direction:column;align-items:center;gap:16px;padding:80px 24px;
-    color:var(--teal-dark);text-align:center;font-size:14.5px;letter-spacing:.02em;}
+  /* ── Індикатор очікування протоколу з телефона (лише на компі): вузька смужка над шаблоном ── */
+  .beam-wait{display:none;align-items:center;gap:10px;padding:11px 18px;
+    background:var(--teal-soft);color:var(--teal-dark);font-size:13px;letter-spacing:.02em;
+    border-bottom:1px solid var(--line-soft);}
   .beam-wait.show{display:flex;}
-  .beam-wait .spin{width:36px;height:36px;border:3px solid var(--teal-soft);border-top-color:var(--teal);
-    border-radius:50%;animation:beamspin .9s linear infinite;}
-  .beam-wait .txt{animation:beampulse 1.6s ease-in-out infinite;}
-  .beam-wait small{color:var(--faint);font-size:12px;letter-spacing:0;}
+  .beam-wait .spin{flex:none;width:17px;height:17px;border:2px solid rgba(0,0,0,.12);border-top-color:var(--teal);
+    border-radius:50%;animation:beamspin .8s linear infinite;}
   @keyframes beamspin{to{transform:rotate(360deg)}}
-  @keyframes beampulse{0%,100%{opacity:1}50%{opacity:.5}}
-  @media(prefers-reduced-motion:reduce){.beam-wait .spin{animation:none}.beam-wait .txt{animation:none}}
+  @media(prefers-reduced-motion:reduce){.beam-wait .spin{animation:none}}
   #doc h2{font-size:20px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 20px;}
   #doc h3{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dark);font-weight:700;
     border-bottom:1px solid var(--ink);padding-bottom:6px;margin:24px 0 10px;}
@@ -337,9 +335,8 @@
     </div>
     <div class="prog" id="progWrap"><span class="prog-bar" id="progBar"></span></div>
     <div id="beamWait" class="beam-wait">
-      <div class="spin" aria-hidden="true"></div>
-      <div class="txt">📲 Очікую протокол…</div>
-      <small>Сформуйте протокол на телефоні під тим самим логіном — він зʼявиться тут автоматично.</small>
+      <span class="spin" aria-hidden="true"></span>
+      <span>📲 Очікую протокол із телефона — сформуйте його там, і він зʼявиться тут автоматично…</span>
     </div>
     <div id="doc" contenteditable="true" spellcheck="true"></div>
     <div class="flagnav" id="flagNav">
@@ -894,9 +891,10 @@
   });
 
   // ── Beam: синк протоколу між пристроями ОДНОГО акаунта (той самий Basic Auth логін). ──
-  // Роль задає ДІЯ, а не тип пристрою: хто записав і сформував протокол — той тихо надсилає його
-  // під логін (сервер, TTL ~5хв, single-use); інший відкритий пристрій сам опитує й показує його.
-  // Так працює і для реального телефона, і для двох вкладок на компі (без ненадійного визначення тач-екрана).
+  // Хто сформував протокол — той тихо надсилає його під логін (сервер, TTL ~5хв, single-use);
+  // інший відкритий пристрій сам опитує й показує його. Надсилання — з будь-якого пристрою
+  // (працює і для двох вкладок), а спінер-очікування — лише на компі (телефон = вказівник coarse/тач).
+  const isPhone = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
   let beamOn = false;                                          // фіча ввімкнена для акаунта (test8 + demo)
   let beamMuteUntil = 0;                                       // після свого надсилання ~мить не «крадемо» власний пакет назад
   function currentBeamPayload(){
@@ -917,9 +915,8 @@
   // Приймач: авто-опитування свого акаунта. На прилітання протоколу — показує його одразу.
   // GET single-use → наступні тіки дають empty, без повторів.
   const beamWait = document.getElementById("beamWait");
-  function showBeamWait(on){                                   // анімація очікування замість порожнього скелета
+  function showBeamWait(on){                                   // смужка-індикатор над шаблоном (шаблон лишається видимим)
     if (beamWait) beamWait.classList.toggle("show", on);
-    doc.style.display = on ? "none" : "";                     // ховаємо панель протоколу (скелет) на час очікування
   }
   let beamPollTimer = null;
   async function beamPoll(){
@@ -938,8 +935,8 @@
   }
   function startBeamPolling(){
     if (beamPollTimer) return;
-    showBeamWait(true);                                        // комп-приймач: одразу показуємо анімацію очікування з телефона
-    beamPollTimer = setInterval(beamPoll, 3500);
+    if (!isPhone) showBeamWait(true);                         // спінер-очікування показуємо лише на компі (приймач)
+    beamPollTimer = setInterval(beamPoll, 2500);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) beamPoll(); });
     beamPoll();                                                // одразу перевірити (раптом диктовка вже чекає)
   }
