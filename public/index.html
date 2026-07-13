@@ -338,8 +338,8 @@
     <div class="prog" id="progWrap"><span class="prog-bar" id="progBar"></span></div>
     <div id="beamWait" class="beam-wait">
       <div class="spin" aria-hidden="true"></div>
-      <div class="txt">📲 Очікую запис із телефона…</div>
-      <small>Протокол зʼявиться тут автоматично, щойно надійде з телефона.</small>
+      <div class="txt">📲 Очікую протокол…</div>
+      <small>Сформуйте протокол на телефоні під тим самим логіном — він зʼявиться тут автоматично.</small>
     </div>
     <div id="doc" contenteditable="true" spellcheck="true"></div>
     <div class="flagnav" id="flagNav">
@@ -893,36 +893,38 @@
     if (recording && document.visibilityState === "visible") acquireWakeLock();
   });
 
-  // ── Beam: телефон формує протокол і САМ шле його на комп (той самий акаунт). ──
-  // На телефоні після «Сформувати протокол» готовий протокол+диктовка тихо йдуть під логін
-  // (сервер, TTL ~5хв, single-use); комп сам опитує свій акаунт і показує готовий протокол одразу.
-  // Роль пристрою — за типом вказівника: coarse/тач = телефон (відправник), інакше = комп (приймач).
-  const isPhone = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+  // ── Beam: синк протоколу між пристроями ОДНОГО акаунта (той самий Basic Auth логін). ──
+  // Роль задає ДІЯ, а не тип пристрою: хто записав і сформував протокол — той тихо надсилає його
+  // під логін (сервер, TTL ~5хв, single-use); інший відкритий пристрій сам опитує й показує його.
+  // Так працює і для реального телефона, і для двох вкладок на компі (без ненадійного визначення тач-екрана).
   let beamOn = false;                                          // фіча ввімкнена для акаунта (test8 + demo)
+  let beamMuteUntil = 0;                                       // після свого надсилання ~мить не «крадемо» власний пакет назад
   function currentBeamPayload(){
     const dictation = (finalText + (finalText && liveText ? " " : "") + liveText).trim();
     const bodyEl = doc.querySelector(".branded-doc .bd-body");                 // брендований: лише тіло (без печатки/підпису)
     const protocol = (bodyEl ? bodyEl.innerHTML : doc.innerHTML).trim();
     return { dictation, protocol };
   }
-  async function beamSend(){                                   // тихо, без UI — викликається після формування на телефоні
+  async function beamSend(){                                   // тихо, без UI — після формування протоколу шле його на інший пристрій
     const { dictation, protocol } = currentBeamPayload();
     if (!dictation && !protocol) return;
+    beamMuteUntil = Date.now() + 12000;                       // ~12с не забираємо власний пакет — хай його візьме інший пристрій
     try{
       await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dictation, protocol }) });
-    }catch(_){ /* збій мережі — не критично, протокол уже на телефоні */ }
+    }catch(_){ /* збій мережі — не критично, протокол уже тут */ }
   }
 
-  // Комп: авто-опитування свого акаунта. На прилітання протоколу — показує його одразу (без формування тут).
+  // Приймач: авто-опитування свого акаунта. На прилітання протоколу — показує його одразу.
   // GET single-use → наступні тіки дають empty, без повторів.
   const beamWait = document.getElementById("beamWait");
-  function showBeamWait(on){                                   // анімація «очікую з телефона» замість порожнього скелета
+  function showBeamWait(on){                                   // анімація очікування замість порожнього скелета
     if (beamWait) beamWait.classList.toggle("show", on);
     doc.style.display = on ? "none" : "";                     // ховаємо панель протоколу (скелет) на час очікування
   }
   let beamPollTimer = null;
   async function beamPoll(){
     if (recording || document.hidden) return;                 // не заважаємо запису; пауза коли вкладка прихована
+    if (Date.now() < beamMuteUntil) return;                   // щойно самі надіслали → не забираємо власний пакет
     try{
       const r = await fetch("/api/beam", { cache:"no-store" });
       const d = await r.json();
@@ -972,7 +974,7 @@
       applyVoiceConclusions(finalText);      // голосові «заключення номер N» → у розділ «Заключення»
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
-      if (isPhone && beamOn) beamSend();    // телефон: готовий протокол одразу летить на комп під тим самим логіном
+      if (beamOn) beamSend();               // сформований протокол одразу летить на інший пристрій під тим самим логіном
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік (TRIAL_DAYS) → оновлюємо лічильник
       setStatus(flagCnt
@@ -1043,9 +1045,9 @@
       const d = await r.json();
       renderTrial(d);
       initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
-      if (d.beam){                          // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
+      if (d.beam){                          // синк між пристроями (test8 + нейтральні/demo для прев'ю)
         beamOn = true;
-        if (!isPhone) startBeamPolling();   // комп: сам підхоплює готовий протокол; телефон авто-шле після формування
+        startBeamPolling();                 // роль за дією: хто сформує — надішле; хто просто відкрив — отримає (бачить спінер)
       }
       // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
       // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
