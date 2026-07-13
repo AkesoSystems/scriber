@@ -134,6 +134,18 @@
   #doc *{max-width:100%;}
   #doc:empty::before{content:"Тут зʼявиться сформований протокол — його можна редагувати як звичайний текст перед копіюванням.";
     color:var(--faint);}
+  #doc.beam-waiting:empty::before{content:"";}                 /* під час очікування з телефона ховаємо підказку */
+  /* ── Очікування протоколу з телефона (на компі): спінер + пульсуючий текст ── */
+  .beam-wait{display:none;flex-direction:column;align-items:center;gap:16px;padding:80px 24px;
+    color:var(--teal-dark);text-align:center;font-size:14.5px;letter-spacing:.02em;}
+  .beam-wait.show{display:flex;}
+  .beam-wait .spin{width:36px;height:36px;border:3px solid var(--teal-soft);border-top-color:var(--teal);
+    border-radius:50%;animation:beamspin .9s linear infinite;}
+  .beam-wait .txt{animation:beampulse 1.6s ease-in-out infinite;}
+  .beam-wait small{color:var(--faint);font-size:12px;letter-spacing:0;}
+  @keyframes beamspin{to{transform:rotate(360deg)}}
+  @keyframes beampulse{0%,100%{opacity:1}50%{opacity:.5}}
+  @media(prefers-reduced-motion:reduce){.beam-wait .spin{animation:none}.beam-wait .txt{animation:none}}
   #doc h2{font-size:20px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 20px;}
   #doc h3{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-dark);font-weight:700;
     border-bottom:1px solid var(--ink);padding-bottom:6px;margin:24px 0 10px;}
@@ -325,6 +337,11 @@
       <input type="file" id="imgFile" accept="image/*" hidden multiple>
     </div>
     <div class="prog" id="progWrap"><span class="prog-bar" id="progBar"></span></div>
+    <div id="beamWait" class="beam-wait">
+      <div class="spin" aria-hidden="true"></div>
+      <div class="txt">📲 Очікую запис із телефона…</div>
+      <small>Протокол зʼявиться тут автоматично, щойно надійде з телефона.</small>
+    </div>
     <div id="doc" contenteditable="true" spellcheck="true"></div>
     <div class="flagnav" id="flagNav">
       <span class="fn-count" id="flagCount"></span>
@@ -809,6 +826,7 @@
       return;
     }
     finalText = ""; recChunks = [];
+    if (typeof showBeamWait === "function") showBeamWait(false);   // почали запис на цьому пристрої → прибираємо анімацію очікування
     flagNav.classList.remove("show"); doc.contentEditable = "false";
     showSkeleton(true);                                // порожній бланк видно під час запису
     const mime = pickMime();
@@ -897,6 +915,11 @@
 
   // Комп: авто-опитування свого акаунта. На прилітання протоколу — показує його одразу (без формування тут).
   // GET single-use → наступні тіки дають empty, без повторів.
+  const beamWait = document.getElementById("beamWait");
+  function showBeamWait(on){                                   // анімація «очікую з телефона» замість білого екрана
+    if (beamWait) beamWait.classList.toggle("show", on);
+    doc.classList.toggle("beam-waiting", on);                 // ховаємо підказку-плейсхолдер, поки крутиться спінер
+  }
   let beamPollTimer = null;
   async function beamPoll(){
     if (recording || document.hidden) return;                 // не заважаємо запису; пауза коли вкладка прихована
@@ -904,6 +927,7 @@
       const r = await fetch("/api/beam", { cache:"no-store" });
       const d = await r.json();
       if (!r.ok || d.empty) return;
+      showBeamWait(false);                                     // щось прийшло → прибираємо анімацію
       if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }   // render() вмикає кнопку «Сформувати протокол» (запас)
       if (d.protocol){ renderProtocolHtml(d.protocol); }                        // готовий протокол з телефона → показуємо як є
       saveDraft();
@@ -912,6 +936,7 @@
   }
   function startBeamPolling(){
     if (beamPollTimer) return;
+    if (!doc.textContent.trim()) showBeamWait(true);           // порожній екран → показуємо анімацію очікування
     beamPollTimer = setInterval(beamPoll, 3500);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) beamPoll(); });
     beamPoll();                                                // одразу перевірити (раптом диктовка вже чекає)
