@@ -909,8 +909,9 @@
     const bodyEl = doc.querySelector(".branded-doc .bd-body");                 // брендований: лише тіло (без печатки/підпису)
     return (bodyEl ? bodyEl.innerHTML : doc.innerHTML).trim();
   }
-  async function beamSend(){                                   // тихо, без UI — після формування протоколу
-    const protocol = currentProtocolHtml();
+  async function beamSend(html){                              // тихо, без UI — після формування протоколу
+    // Надсилаємо ЧИСТИЙ серверний HTML (без inline-стилів анімації opacity:0 — інакше на компі блоки невидимі).
+    const protocol = String(html != null ? html : currentProtocolHtml()).trim();
     if (!protocol) return;
     beamMuteUntil = Date.now() + 12000;                       // ~12с не забираємо власний пакет — хай його візьме комп
     try{ await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ protocol }) }); }
@@ -984,7 +985,7 @@
       applyVoiceConclusions(finalText);      // голосові «заключення номер N» → у розділ «Заключення»
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
-      if (beamOn) beamSend();               // готовий протокол одразу летить на комп під тим самим логіном
+      if (beamOn) beamSend(data.html);      // ЧИСТИЙ протокол (не заанімований DOM) одразу летить на комп
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік (TRIAL_DAYS) → оновлюємо лічильник
       setStatus(flagCnt
