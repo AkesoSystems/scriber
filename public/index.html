@@ -299,6 +299,7 @@
     <div class="wave" id="wave" aria-hidden="true"></div>
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
+      <button id="beamSendBtn" class="btn-ghost" hidden title="Надіслати диктовку на комп'ютер під цим акаунтом — протокол сформуєте там (діє ~5 хв)">📲 На комп</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
@@ -318,7 +319,6 @@
         <button id="imgBtn" class="btn-ghost" hidden title="Додати рентген-знімок">+ Знімок</button>
         <button id="pageBtn" class="btn-ghost" hidden title="Перегляд по сторінках (A4)">Сторінки</button>
         <button id="conclBtn" class="btn-ghost" hidden title="Вставити готове заключення">Заключення</button>
-        <button id="beamSendBtn" class="btn-ghost" hidden title="Надіслати диктовку на комп'ютер під цим акаунтом — протокол сформується там сам (діє ~5 хв)">📲 На комп</button>
         <button id="copyBtn" class="btn-ghost">Копіювати</button>
         <button id="docBtn" class="btn-ghost">Word</button>
         <button id="pdfBtn" class="btn-ghost">PDF</button>
@@ -911,9 +911,9 @@
       const r = await fetch("/api/beam", { cache:"no-store" });
       const d = await r.json();
       if (!r.ok || d.empty) return;
-      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
-      if (d.protocol){ renderProtocolHtml(d.protocol); saveDraft(); setStatus("📲 Отримано з телефона."); }
-      else if (d.dictation){ saveDraft(); setStatus("📲 Отримано з телефона — формую протокол…"); generateProtocol(); }
+      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }   // render() вмикає кнопку «Сформувати протокол»
+      if (d.protocol){ renderProtocolHtml(d.protocol); saveDraft(); setStatus("📲 Протокол отримано з телефона."); }
+      else if (d.dictation){ saveDraft(); setStatus("📲 Запис отримано з телефона — натисніть «Сформувати протокол»."); }
     }catch(_){ /* тимчасова помилка мережі — наступний тік спробує знову */ }
   }
   function startBeamPolling(){
