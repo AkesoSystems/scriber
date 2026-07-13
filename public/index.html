@@ -384,6 +384,18 @@
 
 <script>
 (function(){
+  // ── ТИМЧАСОВО: видимий перехоплювач JS-помилок (діагностика «не формує») ──
+  function showJsErr(prefix, msg){
+    try{
+      var b = document.getElementById("jsErrBanner");
+      if (!b){ b = document.createElement("div"); b.id = "jsErrBanner";
+        b.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b00020;color:#fff;font:12px/1.45 monospace;padding:8px 12px;white-space:pre-wrap;max-height:45vh;overflow:auto";
+        (document.body || document.documentElement).appendChild(b); }
+      b.textContent = prefix + ": " + msg;
+    }catch(_){}
+  }
+  window.addEventListener("error", function(e){ showJsErr("JS ERROR", (e.message||"") + (e.filename ? (" @ " + String(e.filename).split("/").pop() + ":" + e.lineno + ":" + e.colno) : "")); });
+  window.addEventListener("unhandledrejection", function(e){ showJsErr("PROMISE ERROR", (e.reason && (e.reason.message || e.reason)) || "unknown"); });
   // ── Аналітика: лише події і числа, без тексту диктовок ──
   let uid = localStorage.getItem("uzd_uid");
   if (!uid){ uid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("uzd_uid", uid); }
