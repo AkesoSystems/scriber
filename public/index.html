@@ -141,6 +141,10 @@
   .beam-wait.show{display:flex;}
   .beam-wait .spin{flex:none;width:17px;height:17px;border:2px solid rgba(0,0,0,.12);border-top-color:var(--teal);
     border-radius:50%;animation:beamspin .8s linear infinite;}
+  .beam-wait.ready{background:#fff4d6;color:#7a5b00;border-bottom-color:#e9d9a0;font-weight:600;}
+  .beam-accept{margin-left:auto;flex:none;padding:7px 15px;font-size:12px;font-weight:700;letter-spacing:.06em;
+    text-transform:uppercase;border:0;border-radius:8px;background:var(--teal);color:#fff;cursor:pointer;}
+  .beam-accept:hover{background:var(--teal-dark);}
   @keyframes beamspin{to{transform:rotate(360deg)}}
   @media(prefers-reduced-motion:reduce){.beam-wait .spin{animation:none}}
   #doc h2{font-size:20px;font-weight:700;text-align:center;letter-spacing:.01em;color:var(--ink);margin:0 0 20px;}
@@ -336,7 +340,8 @@
     <div class="prog" id="progWrap"><span class="prog-bar" id="progBar"></span></div>
     <div id="beamWait" class="beam-wait">
       <span class="spin" aria-hidden="true"></span>
-      <span>📲 Очікую протокол із телефона — сформуйте його там, і він зʼявиться тут автоматично…</span>
+      <span class="beam-msg">📲 Очікую протокол із телефона — сформуйте його там…</span>
+      <button id="beamAcceptBtn" class="beam-accept" type="button" hidden>Прийняти протокол</button>
     </div>
     <div id="doc" contenteditable="true" spellcheck="true"></div>
     <div class="flagnav" id="flagNav">
@@ -912,30 +917,54 @@
     }catch(_){ /* збій мережі — не критично, протокол уже тут */ }
   }
 
-  // Приймач: авто-опитування свого акаунта. На прилітання протоколу — показує його одразу.
-  // GET single-use → наступні тіки дають empty, без повторів.
+  // Приймач (комп): смужка-індикатор над шаблоном. Спершу «Очікую…», а на прилітання —
+  // «Прийняти протокол» (юзер тисне, і протокол зʼявляється). GET single-use → тримаємо пакет у пам'яті.
   const beamWait = document.getElementById("beamWait");
-  function showBeamWait(on){                                   // смужка-індикатор над шаблоном (шаблон лишається видимим)
-    if (beamWait) beamWait.classList.toggle("show", on);
+  const beamMsg = beamWait ? beamWait.querySelector(".beam-msg") : null;
+  const beamSpin = beamWait ? beamWait.querySelector(".spin") : null;
+  const beamAcceptBtn = document.getElementById("beamAcceptBtn");
+  let beamPending = null;                                      // прийнятий, але ще не застосований пакет із телефона
+  function beamHide(){ if (beamWait) beamWait.classList.remove("show","ready"); beamPending = null; }
+  function beamWaiting(){                                      // стан «очікую протокол з телефона»
+    if (!beamWait) return;
+    beamPending = null;
+    if (beamSpin) beamSpin.style.display = "";
+    if (beamMsg) beamMsg.textContent = "📲 Очікую протокол із телефона — сформуйте його там…";
+    if (beamAcceptBtn) beamAcceptBtn.hidden = true;
+    beamWait.classList.remove("ready"); beamWait.classList.add("show");
   }
+  function beamReady(d){                                       // прилетіло → показуємо кнопку «Прийняти протокол»
+    beamPending = d;
+    if (!beamWait) return;
+    if (beamSpin) beamSpin.style.display = "none";
+    if (beamMsg) beamMsg.textContent = "📲 Протокол із телефона готовий";
+    if (beamAcceptBtn) beamAcceptBtn.hidden = false;
+    beamWait.classList.add("show","ready");
+  }
+  function showBeamWait(on){ if (on) beamWaiting(); else beamHide(); }   // сумісність зі старими викликами (запис/чернетка)
+  function applyBeam(d){                                       // застосувати пакет: показати протокол (або сформувати з диктовки)
+    if (!d) return;
+    if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
+    if (d.protocol){ renderProtocolHtml(d.protocol); saveDraft(); setStatus("📲 Протокол із телефона прийнято."); }
+    else if (d.dictation){ saveDraft(); setStatus("📲 Диктовку з телефона прийнято — формую протокол…"); generateProtocol(); }
+  }
+  if (beamAcceptBtn) beamAcceptBtn.addEventListener("click", () => { const d = beamPending; beamHide(); applyBeam(d); });
   let beamPollTimer = null;
   async function beamPoll(){
     if (recording || document.hidden) return;                 // не заважаємо запису; пауза коли вкладка прихована
     if (Date.now() < beamMuteUntil) return;                   // щойно самі надіслали → не забираємо власний пакет
+    if (beamPending) return;                                   // вже є непринятий пакет — чекаємо на «Прийняти»
     try{
       const r = await fetch("/api/beam", { cache:"no-store" });
       const d = await r.json();
       if (!r.ok || d.empty) return;
-      showBeamWait(false);                                     // щось прийшло → прибираємо анімацію
-      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }   // render() вмикає кнопку «Сформувати протокол» (запас)
-      if (d.protocol){ renderProtocolHtml(d.protocol); }                        // готовий протокол з телефона → показуємо як є
-      saveDraft();
-      setStatus("📲 Отримано з телефона.");
+      beamReady(d);                                            // показуємо кнопку «Прийняти протокол»
+      setStatus("📲 Прийшов протокол із телефона — натисніть «Прийняти протокол».");
     }catch(_){ /* тимчасова помилка мережі — наступний тік спробує знову */ }
   }
   function startBeamPolling(){
     if (beamPollTimer) return;
-    if (!isPhone) showBeamWait(true);                         // спінер-очікування показуємо лише на компі (приймач)
+    beamWaiting();                                             // приймач одразу показує смужку «Очікую…»
     beamPollTimer = setInterval(beamPoll, 2500);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) beamPoll(); });
     beamPoll();                                                // одразу перевірити (раптом диктовка вже чекає)
@@ -1044,7 +1073,7 @@
       initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
       if (d.beam){                          // синк між пристроями (test8 + нейтральні/demo для прев'ю)
         beamOn = true;
-        startBeamPolling();                 // роль за дією: хто сформує — надішле; хто просто відкрив — отримає (бачить спінер)
+        if (!isPhone) startBeamPolling();   // комп (приймач) опитує й показує «Прийняти»; телефон лише надсилає після формування
       }
       // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
       // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
