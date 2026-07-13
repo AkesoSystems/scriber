@@ -299,7 +299,6 @@
     <div class="wave" id="wave" aria-hidden="true"></div>
     <div class="controls">
       <button id="recBtn" class="btn-rec"><span class="dot"></span>Почати запис</button>
-      <button id="beamSendBtn" class="btn-ghost" hidden title="Надіслати диктовку на комп'ютер під цим акаунтом — протокол сформуєте там (діє ~5 хв)">📲 На комп</button>
       <button id="clearBtn" class="btn-ghost">Очистити</button>
       <button id="genBtn" class="btn-main" disabled>Сформувати протокол</button>
       <span class="timer" id="timer"></span>
@@ -876,34 +875,28 @@
     if (recording && document.visibilityState === "visible") acquireWakeLock();
   });
 
-  // ── Beam: перенос диктовки телефон→комп у межах ОДНОГО акаунта ──
-  // Телефон кладе під свій логін однією кнопкою «📲 На комп» (сервер, TTL ~5хв, single-use);
-  // комп САМ опитує свій акаунт, підхоплює диктовку й одразу формує протокол — без другої кнопки.
+  // ── Beam: телефон формує протокол і САМ шле його на комп (той самий акаунт). ──
+  // На телефоні після «Сформувати протокол» готовий протокол+диктовка тихо йдуть під логін
+  // (сервер, TTL ~5хв, single-use); комп сам опитує свій акаунт і показує готовий протокол одразу.
   // Роль пристрою — за типом вказівника: coarse/тач = телефон (відправник), інакше = комп (приймач).
   const isPhone = window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-  const beamSendBtn = document.getElementById("beamSendBtn");
+  let beamOn = false;                                          // фіча ввімкнена для акаунта (test8 + demo)
   function currentBeamPayload(){
     const dictation = (finalText + (finalText && liveText ? " " : "") + liveText).trim();
     const bodyEl = doc.querySelector(".branded-doc .bd-body");                 // брендований: лише тіло (без печатки/підпису)
     const protocol = (bodyEl ? bodyEl.innerHTML : doc.innerHTML).trim();
     return { dictation, protocol };
   }
-  async function beamSend(){
+  async function beamSend(){                                   // тихо, без UI — викликається після формування на телефоні
     const { dictation, protocol } = currentBeamPayload();
-    if (!dictation && !protocol){ setStatus("Немає що надсилати — спершу продиктуйте.", true); return; }
-    beamSendBtn.disabled = true;
+    if (!dictation && !protocol) return;
     try{
-      const r = await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dictation, protocol }) });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "fail");
-      setStatus("📲 Надіслано на ваш комп'ютер. Відкрийте Scriber на комп'ютері під тим самим логіном — протокол сформується сам.");
-    }catch(_){ setStatus("Не вдалося надіслати. Спробуйте ще раз.", true); }
-    finally{ beamSendBtn.disabled = false; }
+      await fetch("/api/beam", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ dictation, protocol }) });
+    }catch(_){ /* збій мережі — не критично, протокол уже на телефоні */ }
   }
-  if (beamSendBtn) beamSendBtn.addEventListener("click", beamSend);
 
-  // Комп: авто-опитування свого акаунта. На непорожнє — підхоплює диктовку й САМ формує протокол
-  // (той самий шлях, що й кнопка «Сформувати»). GET single-use → наступні тіки дають empty, без повторів.
+  // Комп: авто-опитування свого акаунта. На прилітання протоколу — показує його одразу (без формування тут).
+  // GET single-use → наступні тіки дають empty, без повторів.
   let beamPollTimer = null;
   async function beamPoll(){
     if (recording || document.hidden) return;                 // не заважаємо запису; пауза коли вкладка прихована
@@ -911,9 +904,10 @@
       const r = await fetch("/api/beam", { cache:"no-store" });
       const d = await r.json();
       if (!r.ok || d.empty) return;
-      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }   // render() вмикає кнопку «Сформувати протокол»
-      if (d.protocol){ renderProtocolHtml(d.protocol); saveDraft(); setStatus("📲 Протокол отримано з телефона."); }
-      else if (d.dictation){ saveDraft(); setStatus("📲 Запис отримано з телефона — натисніть «Сформувати протокол»."); }
+      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }   // render() вмикає кнопку «Сформувати протокол» (запас)
+      if (d.protocol){ renderProtocolHtml(d.protocol); }                        // готовий протокол з телефона → показуємо як є
+      saveDraft();
+      setStatus("📲 Отримано з телефона.");
     }catch(_){ /* тимчасова помилка мережі — наступний тік спробує знову */ }
   }
   function startBeamPolling(){
@@ -953,6 +947,7 @@
       applyVoiceConclusions(finalText);      // голосові «заключення номер N» → у розділ «Заключення»
       const flagCnt = doc.querySelectorAll(".flag").length;
       saveDraft();
+      if (isPhone && beamOn) beamSend();    // телефон: готовий протокол одразу летить на комп під тим самим логіном
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік (TRIAL_DAYS) → оновлюємо лічильник
       setStatus(flagCnt
@@ -1024,8 +1019,8 @@
       renderTrial(d);
       initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
       if (d.beam){                          // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
-        if (isPhone){ if (beamSendBtn) beamSendBtn.hidden = false; }  // телефон: одна кнопка «📲 На комп»
-        else { startBeamPolling(); }                                 // комп: сам підхоплює диктовку й формує протокол
+        beamOn = true;
+        if (!isPhone) startBeamPolling();   // комп: сам підхоплює готовий протокол; телефон авто-шле після формування
       }
       // Показати випадайку шаблонів: нейтральному QA-акаунту (усі шаблони) ТА реальному лікарю з
       // власним набором (canPick). Заповнюємо один раз. Нейтральному додаємо мітку «— хто» (для QA);
