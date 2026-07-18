@@ -233,6 +233,10 @@
   #annotBar .ab-sep{width:1px;align-self:stretch;background:#4a3a6a;margin:0 3px;}
   #annotBar .ab-col{width:22px;height:22px;padding:0;border-radius:50%;border:2px solid #fff;}
   #annotBar .ab-col.on{outline:2px solid #fff;outline-offset:2px;}
+  #annotBar .ab-col-custom{-webkit-appearance:none;appearance:none;background:none;cursor:pointer;overflow:hidden;}
+  #annotBar .ab-col-custom::-webkit-color-swatch-wrapper{padding:0;}
+  #annotBar .ab-col-custom::-webkit-color-swatch{border:none;border-radius:50%;}
+  #annotBar .ab-col-custom::-moz-color-swatch{border:none;border-radius:50%;}
   #annotBar .ab-done{background:#3a7d44;border-color:#4a9d54;color:#fff;}
   /* підпис/печатка/дисклеймер — у потоці після знімків (коректно для будь-якої довжини) */
   /* ФІКСОВАНІ позиції як у макеті: печатка центр ~48mm, підпис центр ~145mm (НЕ space-between!) */
@@ -385,6 +389,7 @@
     <button type="button" class="ab-col on" data-col="#e0241b" style="background:#e0241b" title="Червоний" aria-label="Червоний"></button>
     <button type="button" class="ab-col" data-col="#f5b400" style="background:#f5b400" title="Жовтий" aria-label="Жовтий"></button>
     <button type="button" class="ab-col" data-col="#12b04a" style="background:#12b04a" title="Зелений" aria-label="Зелений"></button>
+    <input type="color" id="abColCustom" class="ab-col ab-col-custom" value="#3b82f6" title="Свій колір" aria-label="Свій колір">
     <span class="ab-sep"></span>
     <button type="button" id="abUndo" title="Скасувати останнє">↶ Скасувати</button>
     <button type="button" id="abClear" title="Очистити все на цьому знімку">Очистити</button>
@@ -718,6 +723,8 @@
       rz.addEventListener("pointerup", () => { rs = null; });
     }
     if (del) del.addEventListener("click", () => { const idx = el.dataset.idx; el.remove(); if (mirror){ const o = docImgByIdx(idx); if (o){ o.remove(); reflowCanvas(); } } reflowCanvasEl(canvas); });
+    const abtn = el.querySelector(".bd-annot-btn");   // ✎ працює і в #doc, і в клоні «Сторінки» → редагуємо КАНОНІЧНИЙ знімок у #doc
+    if (abtn) abtn.addEventListener("click", ev => { ev.stopPropagation(); enterAnnot(mirror ? (docImgByIdx(el.dataset.idx) || el) : el); });
   }
   function addBrandedImage(src){
     const canvas = bdCanvas(); if (!canvas) return;
@@ -730,9 +737,7 @@
       + '<span class="bd-rz"></span><span class="bd-del">×</span>';
     canvas.appendChild(el);
     el.querySelector("img").addEventListener("load", () => { initAnnotSvg(el); reflowCanvas(); refreshPreviewIfOpen(); });
-    const abtn = el.querySelector(".bd-annot-btn");
-    if (abtn) abtn.addEventListener("click", e => { e.stopPropagation(); enterAnnot(el); });
-    wireImg(el, canvas, false);
+    wireImg(el, canvas, false);   // wireImg вішає і drag/resize/del, і ✎ (розмітку)
     reflowCanvas();
     refreshPreviewIfOpen();   // якщо «Сторінки» відкриті — одразу показати новий знімок там
   }
@@ -852,10 +857,15 @@
     const toolBtns = { arrow:document.getElementById("abArrow"), pen:document.getElementById("abPen"), text:document.getElementById("abText") };
     const setTool = t => { annotTool = t; Object.keys(toolBtns).forEach(k => toolBtns[k] && toolBtns[k].classList.toggle("on", k === t)); };
     Object.keys(toolBtns).forEach(k => toolBtns[k] && toolBtns[k].addEventListener("click", () => setTool(k)));
-    document.querySelectorAll("#annotBar .ab-col").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("#annotBar button.ab-col").forEach(b => b.addEventListener("click", () => {
       annotColor = b.dataset.col;
       document.querySelectorAll("#annotBar .ab-col").forEach(x => x.classList.toggle("on", x === b));
     }));
+    const customCol = document.getElementById("abColCustom");
+    if (customCol) customCol.addEventListener("input", () => {
+      annotColor = customCol.value;
+      document.querySelectorAll("#annotBar .ab-col").forEach(x => x.classList.toggle("on", x === customCol));
+    });
     const undoBtn = document.getElementById("abUndo"), clearBtn = document.getElementById("abClear"),
           doneBtn = document.getElementById("abDone"), cancelBtn = document.getElementById("abCancel");
     undoBtn && undoBtn.addEventListener("click", () => { if (amSvg && amSvg.lastElementChild && !isHit(amSvg.lastElementChild)) amSvg.removeChild(amSvg.lastElementChild); });
@@ -904,7 +914,7 @@
       }
       if (pi.tail && hasImgs){
         const c = canvas.cloneNode(true);
-        if (interactive){ c.querySelectorAll(".bd-annot-btn").forEach(x => x.remove()); c.querySelectorAll(".bd-img.annotating").forEach(x => x.classList.remove("annotating")); c.querySelectorAll(".bd-img").forEach(im => wireImg(im, c, true)); c.querySelectorAll("img").forEach(im => im.addEventListener("load", () => reflowCanvasEl(c))); reflowCanvasEl(c); }
+        if (interactive){ c.querySelectorAll(".bd-img.annotating").forEach(x => x.classList.remove("annotating")); c.querySelectorAll(".bd-img").forEach(im => wireImg(im, c, true)); c.querySelectorAll("img").forEach(im => im.addEventListener("load", () => reflowCanvasEl(c))); reflowCanvasEl(c); }
         else { c.querySelectorAll(".bd-del,.bd-rz,.bd-annot-btn").forEach(x => x.remove()); c.querySelectorAll(".bd-img.annotating").forEach(x => x.classList.remove("annotating")); }
         pg.appendChild(c);
       }
