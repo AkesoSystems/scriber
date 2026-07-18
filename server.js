@@ -293,7 +293,7 @@ app.get("/api/trial", (req, res) => {
   const quota = PROTOCOL_QUOTA_BY_USER[user];
   const usage = quota ? { protocolQuota: quota, protocolsUsed: protocolsUsed(user) } : {};
   const conclusions = CONCLUSIONS_BY_USER[user] || null;  // бібліотека готових заключень (own-only)
-  const beam = BEAM_USERS.has(user) || isNeutral;         // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
+  const beam = BEAM_USERS.has(user);                      // синк телефон→комп (лише BEAM_USERS, напр. test8; demo/нейтральні вимкнено)
   res.json(Object.assign({ user, isNeutral, canPick, templates, primary, conclusions, beam }, trialState(user), usage));
 });
 
@@ -301,7 +301,7 @@ app.get("/api/trial", (req, res) => {
 // Роксоляна (test8) диктує з телефона й доводить на комп'ютері. Клінічний текст свідомо тримаємо
 // ЛИШЕ в пам'яті: без диска, без логів, короткий TTL і single-use (перше ж отримання стирає) — щоб
 // не порушувати PHI-firewall (нуль клінічного тексту на диску/в аналітиці). Ключ = логін акаунта.
-const BEAM_USERS = new Set(["test8"]);      // кому показуємо синк (нейтральні/demo вмикаються окремо, для прев'ю)
+const BEAM_USERS = new Set(["test8"]);      // кому показуємо синк телефон→комп (demo/нейтральні НЕ вмикаємо — щоб не плутало під час тестів)
 const BEAM_TTL_MS = 5 * 60 * 1000;          // 5 хв — «пару хвилин», щоб встигнути перейти на комп
 const beamStore = new Map();                 // user → { t, dictation, protocol }
 function beamSweep() {                        // прибирання протухлих (якщо ніхто не забрав)
