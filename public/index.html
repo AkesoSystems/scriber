@@ -445,12 +445,18 @@
 
   const SEG_MS = 8000;       // довжина сегмента (~8 с)
 
-  // ── Чернетка у sessionStorage: переживає F5 / відновлення вкладки; здебільшого очищається при
-  //    закритті вкладки (виняток — відновлення після краху браузера, тоді рятує явний банер + TTL)
-  //    → НЕ лишає клінічний текст наступному лікарю на спільному компі.
-  //    НЕтихо: при відкритті питаємо явно; чистимо при копіюванні / Word / PDF / «Очистити». ──
+  // ── Чернетка: за замовчуванням у sessionStorage — переживає F5 / відновлення вкладки, але
+  //    вмирає при закритті вкладки → НЕ лишає клінічний текст наступному лікарю на спільному компі.
+  //    Виняток — DURABLE_DRAFT_USERS (особистий ПК лікаря): чернетка йде в localStorage і переживає
+  //    ПОВНИЙ перезапуск застосунку (Edge --app: закрив вікно = вбив вкладку), щоб не диктувати
+  //    заново після збою генерації. Own-only — інших лікарів не зачіпає.
+  //    НЕтихо: при відкритті питаємо явно банером; чистимо при копії / Word / PDF / «Очистити» / logout. ──
   const DRAFT_KEY = "uzd_draft";
-  const DRAFT_TTL_MS = 2 * 60 * 60 * 1000;   // 2 год — старіші чернетки не пропонуємо
+  const DRAFT_TTL_MS = 2 * 60 * 60 * 1000;            // sessionStorage: 2 год — старіші не пропонуємо
+  const DRAFT_TTL_DURABLE_MS = 24 * 60 * 60 * 1000;  // localStorage (durable): 24 год — перезапуск може бути не миттєвий
+  const DURABLE_DRAFT_USERS = new Set(["test10"]);   // особистий ПК → чернетка переживає перезапуск (localStorage)
+  let durableDraft = false;                          // стає true у loadTrial, коли d.user у наборі
+  function draftStore(){ return durableDraft ? localStorage : sessionStorage; }
   let draftTimer = null;
   let droppedSegs = 0;                        // аудіо-сегменти, що не дійшли (мережа)
   function saveDraft(){
@@ -461,20 +467,26 @@
         // Брендований: зберігаємо ЛИШЕ текст .bd-body (без печатки/підпису/знімків — не тримаємо ІПН/PHI у sessionStorage)
         const bodyEl = doc.querySelector(".branded-doc .bd-body");
         const protocol = (bodyEl ? bodyEl.innerHTML : doc.innerHTML).trim();
-        if (!dictation && !protocol){ sessionStorage.removeItem(DRAFT_KEY); return; }
-        sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ t: Date.now(), dictation, protocol }));
+        if (!dictation && !protocol){ draftStore().removeItem(DRAFT_KEY); return; }
+        draftStore().setItem(DRAFT_KEY, JSON.stringify({ t: Date.now(), dictation, protocol }));
       }catch(_){ /* сховище недоступне — не критично */ }
     }, 600);
   }
   function wipeDraft(){
+    // чистимо ОБИДВА сховища — щоб на finalize/logout не лишилось стале ні в session-, ні в localStorage
+    try{ localStorage.removeItem(DRAFT_KEY); }catch(_){}
     try{ sessionStorage.removeItem(DRAFT_KEY); }catch(_){}
     if (draftTimer){ clearTimeout(draftTimer); draftTimer = null; }
   }
   function maybeOfferRestore(){
+    // Викликається ПІСЛЯ loadTrial → durableDraft уже відомий; читаємо лише «своє» сховище
+    // (durable-юзер: localStorage / 24 год; решта: sessionStorage / 2 год) → чужого не показуємо.
+    const store = draftStore();
+    const ttl = durableDraft ? DRAFT_TTL_DURABLE_MS : DRAFT_TTL_MS;
     let d = null;
-    try{ d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null"); }catch(_){ d = null; }
+    try{ d = JSON.parse(store.getItem(DRAFT_KEY) || "null"); }catch(_){ d = null; }
     if (!d || (!d.dictation && !d.protocol)) return;
-    if (!d.t || Date.now() - d.t > DRAFT_TTL_MS){ wipeDraft(); return; }
+    if (!d.t || Date.now() - d.t > ttl){ wipeDraft(); return; }
     const dt = new Date(d.t);
     const hhmm = String(dt.getHours()).padStart(2, "0") + ":" + String(dt.getMinutes()).padStart(2, "0");
     document.getElementById("draftTime").textContent = hhmm;
@@ -1067,6 +1079,7 @@
       if (!r.ok) return;
       const d = await r.json();
       renderTrial(d);
+      durableDraft = !!(d.user && DURABLE_DRAFT_USERS.has(d.user));  // особистий ПК → чернетка у localStorage (переживає перезапуск)
       initConclusions(d.conclusions);       // власна бібліотека заключень лікаря (own-only) → кнопка + модалка
       if (d.beam){                          // синк телефон→комп (test8 + нейтральні/demo для прев'ю)
         beamOn = true;
@@ -1097,11 +1110,11 @@
       else showSkeleton();                  // показати порожній бланк протоколу одразу при вході
     }catch(_){ /* без лічильника — не критично */ }
   }
-  loadTrial();
+  // maybeOfferRestore — ПІСЛЯ loadTrial, щоб durableDraft (з d.user) був відомий і ми читали правильне сховище
+  loadTrial().finally(maybeOfferRestore);
 
   // ── Чернетка: ручні правки протоколу теж зберігаємо; потім нетихо пропонуємо відновлення ──
   doc.addEventListener("input", saveDraft);
-  maybeOfferRestore();
 
   // ── Вихід з акаунту (Basic Auth не має справжнього logout — best-effort) ──
   logoutBtn.hidden = false;
