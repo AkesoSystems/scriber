@@ -2265,9 +2265,11 @@ const VET_ZOOLUX_ECHO_BLANK = `<div style="font-family:'Times New Roman', serif"
 // ── Дефі (ветклініка «Дефі», Одеса): УЗД органів черевної порожнини, самець. Лікар Лємєнтовська Дар'я (test11, @newborn.vet.dafna).
 //    Бланк = єдине джерело; промпт інтерполює його (${...}) → ШАБЛОН і статичний blank завжди ідентичні.
 const DAFNA_ABDOMEN_BLANK = `<div style="font-family:Arial,'Segoe UI',Helvetica,sans-serif;font-size:13px;line-height:1.5;text-align:left;color:#000">
-<p style="text-align:center;margin:0 0 4px"><img src="/brand/dafna/logo.png" alt="Ветеринарна клініка Дефі" style="height:74px;width:auto"></p>
-<p style="text-align:center;margin:0 0 2px;font-weight:bold;font-size:16px;font-family:Georgia,'Times New Roman',serif;font-style:italic">Ветеринарна клініка «Дефі»</p>
-<p style="text-align:center;margin:0">+380969910091</p>
+<div style="position:relative;height:84px;margin:0 0 2px">
+<img src="/brand/dafna/logo.png" alt="Ветеринарна клініка Дефі" style="position:absolute;left:40px;top:4px;height:80px;width:auto">
+<p style="margin:0;padding:26px 0 0 150px;font-weight:bold;font-size:19px;font-family:Georgia,'Times New Roman',serif;font-style:italic">Ветеринарна клініка «Дефі»</p>
+</div>
+<p style="text-align:center;margin:0;font-weight:bold;font-style:italic;font-size:12px">+380969910091</p>
 <p style="text-align:center;margin:0 0 8px">м. Одеса, с. Фонтанка, вул. Семенова, 66</p>
 <p style="margin:0 0 2px">П.І.Б. власника: ________</p>
 <p style="margin:0 0 2px">Вид тварини: ________</p>
