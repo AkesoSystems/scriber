@@ -168,6 +168,7 @@
   .modal{display:none;position:fixed;inset:0;z-index:50;background:rgba(12,14,16,.5);
     align-items:center;justify-content:center;padding:20px;}
   .modal.show{display:flex;}
+  html.modal-open{overflow:hidden;}   /* блокувати скрол сторінки, поки відкрита будь-яка модалка */
   .modal-card{position:relative;background:var(--paper);border:1px solid var(--line);
     box-shadow:0 24px 60px rgba(0,0,0,.22);max-width:360px;width:100%;padding:32px 28px 26px;text-align:center;}
   .modal-x{position:absolute;top:6px;right:6px;background:none;border:none;font-size:24px;line-height:1;
@@ -873,6 +874,16 @@
     doneBtn && doneBtn.addEventListener("click", () => closeAnnot(true));
     cancelBtn && cancelBtn.addEventListener("click", () => closeAnnot(false));
   }
+
+  // ── Блокувати скрол сторінки, поки відкрита БУДЬ-ЯКА модалка (універсально: і .show-клас, і [hidden]-атрибут) ──
+  (function(){
+    const SEL = ".modal, .annot-modal";
+    const anyOpen = () => Array.prototype.some.call(document.querySelectorAll(SEL), m => getComputedStyle(m).display !== "none");
+    const sync = () => document.documentElement.classList.toggle("modal-open", anyOpen());
+    const obs = new MutationObserver(sync);
+    document.querySelectorAll(SEL).forEach(m => obs.observe(m, { attributes:true, attributeFilter:["class","hidden","style"] }));
+    sync();
+  })();
 
   const pageBtn = document.getElementById("pageBtn");
   const pageModal = document.getElementById("pageModal");
