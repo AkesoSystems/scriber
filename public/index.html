@@ -210,6 +210,24 @@
     border:2px solid #fff;border-radius:50%;cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.3);}
   .branded-doc .bd-img .bd-del{position:absolute;top:-10px;right:-10px;width:18px;height:18px;border-radius:50%;
     background:#c0392b;color:#fff;border:2px solid #fff;font:700 11px/15px system-ui;text-align:center;cursor:pointer;}
+  /* Розмітка знімка: SVG-оверлей у межах картинки (viewBox = натуральний розмір → однорідне масштабування) */
+  .branded-doc .bd-img .bd-annot-btn{position:absolute;top:-10px;left:-10px;width:18px;height:18px;border-radius:50%;
+    background:#5b3fc4;color:#fff;border:2px solid #fff;font:600 11px/16px system-ui;text-align:center;cursor:pointer;}
+  .branded-doc .bd-img .bd-annot{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+  .branded-doc .bd-img.annotating{outline:2px solid #5b3fc4!important;}
+  .branded-doc .bd-img.annotating .bd-annot{pointer-events:auto;cursor:crosshair;touch-action:none;}
+  .branded-doc .bd-img.annotating .bd-rz,.branded-doc .bd-img.annotating .bd-del,
+  .branded-doc .bd-img.annotating .bd-annot-btn{display:none;}
+  /* Плаваюча панель інструментів розмітки */
+  #annotBar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;gap:6px;align-items:center;
+    background:#1c1230;border:1px solid #3a2a5a;border-radius:12px;padding:8px 10px;box-shadow:0 6px 24px rgba(0,0,0,.45);}
+  #annotBar:not([hidden]){display:flex;flex-wrap:wrap;}
+  #annotBar button{font:600 13px/1 system-ui;padding:7px 10px;border-radius:8px;border:1px solid #4a3a6a;background:#2a1c44;color:#eee;cursor:pointer;}
+  #annotBar button.on{background:#5b3fc4;border-color:#7a5fe0;color:#fff;}
+  #annotBar .ab-sep{width:1px;align-self:stretch;background:#4a3a6a;margin:0 3px;}
+  #annotBar .ab-col{width:22px;height:22px;padding:0;border-radius:50%;border:2px solid #fff;}
+  #annotBar .ab-col.on{outline:2px solid #fff;outline-offset:2px;}
+  #annotBar .ab-done{background:#3a7d44;border-color:#4a9d54;color:#fff;}
   /* підпис/печатка/дисклеймер — у потоці після знімків (коректно для будь-якої довжини) */
   /* ФІКСОВАНІ позиції як у макеті: печатка центр ~48mm, підпис центр ~145mm (НЕ space-between!) */
   .branded-doc .bd-signrow{display:flex;align-items:center;padding:6px 16mm 0 0;}
@@ -223,7 +241,7 @@
   /* друк брендованого: хедер/футер повторюються на кожній сторінці; маркери редагування зникають.
      Селектори прив'язані до .branded-doc → плоскі шаблони друкуються як раніше. */
   @media print{
-    .branded-doc .bd-del,.branded-doc .bd-rz{display:none!important;}
+    .branded-doc .bd-del,.branded-doc .bd-rz,.branded-doc .bd-annot-btn{display:none!important;}
     .branded-doc .bd-img{outline:none!important;}
     /* Детермінований друк брендованого: друкуємо ГОТОВІ A4-аркуші з #printArea (як у «Сторінки»),
        а не віддаємо суцільний #doc браузеру. Прив'язано до body.pbrand → плоскі шаблони не зачеплені. */
@@ -350,6 +368,20 @@
     </div>
     <div class="status" id="status"></div>
   </section>
+</div>
+
+<div id="annotBar" hidden aria-label="Розмітка знімка">
+  <button type="button" id="abArrow" class="on" title="Стрілка">➔ Стрілка</button>
+  <button type="button" id="abPen" title="Олівець (від руки)">✎ Олівець</button>
+  <button type="button" id="abText" title="Текст-підпис">Т Текст</button>
+  <span class="ab-sep"></span>
+  <button type="button" class="ab-col on" data-col="#e0241b" style="background:#e0241b" title="Червоний" aria-label="Червоний"></button>
+  <button type="button" class="ab-col" data-col="#f5b400" style="background:#f5b400" title="Жовтий" aria-label="Жовтий"></button>
+  <button type="button" class="ab-col" data-col="#12b04a" style="background:#12b04a" title="Зелений" aria-label="Зелений"></button>
+  <span class="ab-sep"></span>
+  <button type="button" id="abUndo" title="Скасувати останнє">↶ Скасувати</button>
+  <button type="button" id="abClear" title="Очистити все на цьому знімку">Очистити</button>
+  <button type="button" id="abDone" class="ab-done" title="Завершити розмітку">Готово</button>
 </div>
 
 <div class="modal" id="rateModal" aria-hidden="true">
@@ -663,7 +695,7 @@
       if (mirror){ const o = docImgByIdx(el.dataset.idx); if (o){ o.style.left = el.style.left; o.style.top = el.style.top; o.style.width = el.style.width; reflowCanvas(); } }
     };
     let drag = null, rs = null;
-    el.addEventListener("pointerdown", e => { if (e.target === rz || e.target === del) return; el.style.zIndex = String(++imgSeq); drag = { x:e.clientX, y:e.clientY, l:el.offsetLeft, t:el.offsetTop }; el.setPointerCapture(e.pointerId); });
+    el.addEventListener("pointerdown", e => { if (el.classList.contains("annotating") || e.target === rz || e.target === del || (e.target.classList && e.target.classList.contains("bd-annot-btn"))) return; el.style.zIndex = String(++imgSeq); drag = { x:e.clientX, y:e.clientY, l:el.offsetLeft, t:el.offsetTop }; el.setPointerCapture(e.pointerId); });
     el.addEventListener("pointermove", e => { if (!drag) return; el.style.left = (drag.l + (e.clientX - drag.x)) + "px"; el.style.top = (drag.t + (e.clientY - drag.y)) + "px"; clampImg(el, canvas); sync(); });
     el.addEventListener("pointerup", () => { drag = null; });
     if (rz){
@@ -678,9 +710,14 @@
     const off = (imgSeq % 4) * 10;
     const el = document.createElement("div"); el.className = "bd-img"; el.dataset.idx = String(imgIdx++);
     el.style.left = (18 + off) + "px"; el.style.top = (6 + off) + "px"; el.style.zIndex = String(++imgSeq); el.style.width = "52%";
-    el.innerHTML = '<img src="' + src + '" alt="рентген"><span class="bd-rz"></span><span class="bd-del">×</span>';
+    el.innerHTML = '<img src="' + src + '" alt="рентген">'
+      + '<svg class="bd-annot" preserveAspectRatio="none"></svg>'
+      + '<span class="bd-annot-btn" title="Розмітка: стрілки, олівець, підписи">✎</span>'
+      + '<span class="bd-rz"></span><span class="bd-del">×</span>';
     canvas.appendChild(el);
-    el.querySelector("img").addEventListener("load", () => { reflowCanvas(); refreshPreviewIfOpen(); });
+    el.querySelector("img").addEventListener("load", () => { initAnnotSvg(el); reflowCanvas(); refreshPreviewIfOpen(); });
+    const abtn = el.querySelector(".bd-annot-btn");
+    if (abtn) abtn.addEventListener("click", e => { e.stopPropagation(); enterAnnot(el); });
     wireImg(el, canvas, false);
     reflowCanvas();
     refreshPreviewIfOpen();   // якщо «Сторінки» відкриті — одразу показати новий знімок там
@@ -704,6 +741,90 @@
       }
     }
   });
+  // ═══ Розмітка знімка: SVG-оверлей (стрілки / олівець / текст) → клонується в аркуші й PDF ═══
+  const SVGNS = "http://www.w3.org/2000/svg";
+  let annotTarget = null, annotTool = "arrow", annotColor = "#e0241b", annotDraw = null;
+  const annotBar = document.getElementById("annotBar");
+  function annotSvg(el){ return el ? el.querySelector("svg.bd-annot") : null; }
+  function mkNS(name, attrs){ const e = document.createElementNS(SVGNS, name); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+  function isHit(n){ return n && n.classList && n.classList.contains("bd-annot-hit"); }
+  function initAnnotSvg(el){
+    const svg = annotSvg(el), img = el && el.querySelector("img");
+    if (!svg || !img) return;
+    const w = img.naturalWidth || img.clientWidth || 100, h = img.naturalHeight || img.clientHeight || 100;
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);   // натуральні пікселі → однорідне масштабування у #doc, «Сторінки», PDF
+    svg.dataset.unit = String(Math.max(w, h));
+    let hit = svg.querySelector("rect.bd-annot-hit");     // невидимий ловець кліків по всьому знімку (fill:none + pointer-events:all)
+    if (!hit){ svg.insertBefore(mkNS("rect", { "class":"bd-annot-hit", x:0, y:0, width:w, height:h, fill:"none", "pointer-events":"all" }), svg.firstChild); }
+    else { hit.setAttribute("width", w); hit.setAttribute("height", h); }
+  }
+  function annotUnit(svg){ return Number(svg.dataset.unit) || 600; }
+  function toSvgXY(svg, ev){
+    const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    const m = svg.getScreenCTM(); if (!m) return { x:0, y:0 };
+    const p = pt.matrixTransform(m.inverse()); return { x:p.x, y:p.y };
+  }
+  function arrowPath(x1,y1,x2,y2,head){
+    const a = Math.atan2(y2 - y1, x2 - x1), b = 0.44;    // барби ~25°
+    return "M "+x1+" "+y1+" L "+x2+" "+y2
+      + " M "+x2+" "+y2+" L "+(x2 - head*Math.cos(a-b))+" "+(y2 - head*Math.sin(a-b))
+      + " M "+x2+" "+y2+" L "+(x2 - head*Math.cos(a+b))+" "+(y2 - head*Math.sin(a+b));
+  }
+  function enterAnnot(el){
+    if (annotTarget && annotTarget !== el) exitAnnot();
+    annotTarget = el; el.classList.add("annotating"); initAnnotSvg(el);
+    if (annotBar) annotBar.hidden = false;
+    setStatus("Розмітка знімка: обери інструмент і малюй по знімку, «Готово» — вийти.");
+  }
+  function exitAnnot(){
+    if (annotTarget) annotTarget.classList.remove("annotating");
+    annotTarget = null; annotDraw = null;
+    if (annotBar) annotBar.hidden = true;
+  }
+  document.addEventListener("pointerdown", ev => {
+    if (!annotTarget) return;
+    const svg = annotSvg(annotTarget);
+    if (!svg || !(ev.target === svg || svg.contains(ev.target))) return;   // клік поза знімком (напр. панель) — ігнор
+    ev.preventDefault();
+    const p = toSvgXY(svg, ev), u = annotUnit(svg), sw = Math.max(2, u * 0.007);
+    if (annotTool === "text"){
+      const t = (window.prompt("Текст підпису:") || "").trim();
+      if (t){ const el = mkNS("text", { x:p.x, y:p.y, fill:annotColor, "font-size":(u*0.05), "font-family":"'Times New Roman',serif", "dominant-baseline":"hanging", stroke:"#fff", "stroke-width":(u*0.004), "paint-order":"stroke", "pointer-events":"none" }); el.textContent = t; svg.appendChild(el); }
+      return;
+    }
+    const path = mkNS("path", { d:(annotTool==="pen" ? "M "+p.x+" "+p.y : ""), fill:"none", stroke:annotColor, "stroke-width":sw, "stroke-linecap":"round", "stroke-linejoin":"round", "pointer-events":"none" });
+    svg.appendChild(path);
+    annotDraw = (annotTool === "pen")
+      ? { kind:"pen", el:path, d:"M "+p.x+" "+p.y }
+      : { kind:"arrow", el:path, x1:p.x, y1:p.y, head:Math.max(12, u*0.05) };
+    try{ svg.setPointerCapture(ev.pointerId); }catch(_){}
+  });
+  document.addEventListener("pointermove", ev => {
+    if (!annotDraw || !annotTarget) return;
+    const svg = annotSvg(annotTarget); if (!svg) return;
+    const p = toSvgXY(svg, ev);
+    if (annotDraw.kind === "pen"){ annotDraw.d += " L "+p.x+" "+p.y; annotDraw.el.setAttribute("d", annotDraw.d); }
+    else annotDraw.el.setAttribute("d", arrowPath(annotDraw.x1, annotDraw.y1, p.x, p.y, annotDraw.head));
+  });
+  document.addEventListener("pointerup", () => {
+    if (!annotDraw) return;
+    if (!annotDraw.el.getAttribute("d")) annotDraw.el.remove();   // клік без руху → нічого не лишаємо
+    annotDraw = null; refreshPreviewIfOpen();
+  });
+  if (annotBar){
+    const toolBtns = { arrow:document.getElementById("abArrow"), pen:document.getElementById("abPen"), text:document.getElementById("abText") };
+    const setTool = t => { annotTool = t; Object.keys(toolBtns).forEach(k => toolBtns[k] && toolBtns[k].classList.toggle("on", k === t)); };
+    Object.keys(toolBtns).forEach(k => toolBtns[k] && toolBtns[k].addEventListener("click", () => setTool(k)));
+    annotBar.querySelectorAll(".ab-col").forEach(b => b.addEventListener("click", () => {
+      annotColor = b.dataset.col;
+      annotBar.querySelectorAll(".ab-col").forEach(x => x.classList.toggle("on", x === b));
+    }));
+    const undoBtn = document.getElementById("abUndo"), clearBtn = document.getElementById("abClear"), doneBtn = document.getElementById("abDone");
+    undoBtn && undoBtn.addEventListener("click", () => { const svg = annotSvg(annotTarget); if (svg && svg.lastElementChild && !isHit(svg.lastElementChild)) svg.removeChild(svg.lastElementChild); refreshPreviewIfOpen(); });
+    clearBtn && clearBtn.addEventListener("click", () => { const svg = annotSvg(annotTarget); if (svg) Array.from(svg.children).forEach(c => { if (!isHit(c)) svg.removeChild(c); }); refreshPreviewIfOpen(); });
+    doneBtn && doneBtn.addEventListener("click", () => { exitAnnot(); refreshPreviewIfOpen(); });
+  }
+
   const pageBtn = document.getElementById("pageBtn");
   const pageModal = document.getElementById("pageModal");
   const pgWrap = document.getElementById("pgWrap");
@@ -744,8 +865,8 @@
       }
       if (pi.tail && hasImgs){
         const c = canvas.cloneNode(true);
-        if (interactive){ c.querySelectorAll(".bd-img").forEach(im => wireImg(im, c, true)); c.querySelectorAll("img").forEach(im => im.addEventListener("load", () => reflowCanvasEl(c))); reflowCanvasEl(c); }
-        else { c.querySelectorAll(".bd-del,.bd-rz").forEach(x => x.remove()); }
+        if (interactive){ c.querySelectorAll(".bd-annot-btn").forEach(x => x.remove()); c.querySelectorAll(".bd-img.annotating").forEach(x => x.classList.remove("annotating")); c.querySelectorAll(".bd-img").forEach(im => wireImg(im, c, true)); c.querySelectorAll("img").forEach(im => im.addEventListener("load", () => reflowCanvasEl(c))); reflowCanvasEl(c); }
+        else { c.querySelectorAll(".bd-del,.bd-rz,.bd-annot-btn").forEach(x => x.remove()); c.querySelectorAll(".bd-img.annotating").forEach(x => x.classList.remove("annotating")); }
         pg.appendChild(c);
       }
       const spacer = document.createElement("div"); spacer.className = "bd-spacer"; pg.appendChild(spacer);  // гнучкий гап НАД підписом
@@ -765,7 +886,8 @@
     if (!bd || !p) return [];
     try { const s = paginate(bd, p, interactive); if (s && s.length) return s; } catch(_){}
     const pg = bd.cloneNode(true); pg.classList.add("bd-page");
-    pg.querySelectorAll(".bd-del,.bd-rz").forEach(n => n.remove());
+    pg.querySelectorAll(".bd-del,.bd-rz,.bd-annot-btn").forEach(n => n.remove());
+    pg.querySelectorAll(".bd-img.annotating").forEach(n => n.classList.remove("annotating"));
     pg.querySelectorAll("[contenteditable]").forEach(n => n.removeAttribute("contenteditable"));
     return [pg];
   }
