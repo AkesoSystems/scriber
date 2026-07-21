@@ -2768,10 +2768,18 @@ function sanitizeProtocolHtml(html){
 // («дякую за перегляд»), промпт коректно ігнорує поза-контекст → повертає бланк як є, і лікар
 // бачить «порожній протокол» без жодного попередження. Порівнюємо ТЕКСТ (без тегів/пробілів),
 // бо модель може віддати ті самі дані з мікро-різницею у розмітці.
+// Порівнюємо ЛИШЕ тіло протоколу — до «Висновку». Висновок відрізняється ЗАВЖДИ: у бланку він
+// порожній, а модель за правилами дописує норм-речення навіть коли з диктовки не взяла нічого.
+// Без цієї відсічі гард не спрацьовував би жодного разу (перевірено на проді).
 function sameAsBlank(html, blank) {
   if (!html || !blank) return false;
-  const norm = (s) => String(s).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-  return norm(html) === norm(blank);
+  const body = (s) => {
+    const t = String(s).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    const i = t.search(/Висновок/i);
+    return i > 0 ? t.slice(0, i).trim() : t;
+  };
+  const a = body(html), b = body(blank);
+  return !!a && a === b;
 }
 
 app.post("/api/autofill", async (req, res) => {
