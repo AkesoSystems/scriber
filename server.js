@@ -67,7 +67,7 @@ const EV_CODES = new Set([
   "bedrock_throttle", "bedrock_empty", "bedrock_timeout", "bedrock_throw",
   "anthropic_empty", "anthropic_throw",
   "cli_timeout", "cli_limit", "cli_notfound", "cli_empty",
-  "no_provider", "network", "trial_over", "unknown",
+  "no_provider", "network", "trial_over", "text_gen_disabled", "blank_result", "unknown",
 ]);
 const EV_MODELS = new Set([
   "us.amazon.nova-pro-v1:0", "amazon.nova-pro-v1:0", "claude-opus-4-8", "claude-cli-max",
@@ -136,6 +136,10 @@ function logEvent(uid, event, value, user, meta) {
       row.ms = Math.round(meta.ms);
     }
     if (meta.fallback === true) row.fallback = true;
+    // Розмір транскрипту (символи) і кількість числівників у ньому — ЛИШЕ числа, без тексту.
+    // Дає відповідь «чи Whisper узагалі почув цифри», не порушуючи PHI-safe правило.
+    if (typeof meta.chars === "number" && isFinite(meta.chars) && meta.chars >= 0) row.chars = Math.min(100000, Math.round(meta.chars));
+    if (typeof meta.nums === "number" && isFinite(meta.nums) && meta.nums >= 0) row.nums = Math.min(10000, Math.round(meta.nums));
   }
   fs.appendFile(ANALYTICS_FILE, JSON.stringify(row) + "\n", (err) => {
     if (err) console.error("[analytics] запис не вдався:", err.message);
@@ -388,7 +392,9 @@ app.get("/api/stats", (req, res) => {
     recordings = [];
     for (const r of rows) {
       if (r.event === "rec_stop") recordings.push({ t: r.t, kind: "rec", durationSec: r.value || 0 });
-      else if (r.event === "generate_ok") recordings.push({ t: r.t, kind: "proto", ms: typeof r.ms === "number" ? r.ms : null });
+      // Транскрипт: скільки символів і числівників почув Whisper (PHI-safe — самого тексту немає).
+      else if (r.event === "transcribe_ok") recordings.push({ t: r.t, kind: "asr", ms: typeof r.ms === "number" ? r.ms : null, chars: typeof r.chars === "number" ? r.chars : null, nums: typeof r.nums === "number" ? r.nums : null });
+      else if (r.event === "generate_ok") recordings.push({ t: r.t, kind: "proto", ms: typeof r.ms === "number" ? r.ms : null, code: r.code || undefined });
       else if (r.event === "generate_err") recordings.push({ t: r.t, kind: "err", code: r.code || "unknown" });
       else if (r.event === "rating" && r.value >= 1 && r.value <= 5) recordings.push({ t: r.t, kind: "rating", value: r.value });
     }
@@ -2508,8 +2514,13 @@ app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
 
     const data = await r.json();
     const ms = Date.now() - t0;
-    logEvent(uid, "transcribe_ok", Math.round(ms / 1000), user, { stage: "transcribe", ms });
-    res.json({ text: (data.text || "").trim() });
+    // PHI-safe метрики транскрипту: САМ ТЕКСТ не логуємо ніколи, лише скільки символів і скільки
+    // числівників у ньому. Без цього неможливо відрізнити «Whisper нічого не почув» від «почув, але
+    // модель не заповнила» — саме на цьому ми загрузли з порожніми протоколами.
+    const text = (data.text || "").trim();
+    const nums = (text.match(/\d|\b(?:нуль|один|одна|два|дві|три|чотири|п'ять|шість|сім|вісім|дев'ять|десять|одинадцять|дванадцять|тринадцять|чотирнадцять|пʼятнадцять|шістнадцять|сімнадцять|вісімнадцять|дев'ятнадцять|двадцять|тридцять|сорок|п'ятдесят|шістдесят|сімдесят|вісімдесят|дев'яносто|сто|двісті|триста)\b/gi) || []).length;
+    logEvent(uid, "transcribe_ok", Math.round(ms / 1000), user, { stage: "transcribe", ms, chars: text.length, nums });
+    res.json({ text });
   } catch (err) {
     logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_network" });
     res.status(500).json({ error: "Не вдалося розпізнати аудіо: " + (err.message || "невідома помилка") });
@@ -2752,6 +2763,17 @@ function sanitizeProtocolHtml(html){
   return s.trim();
 }
 
+// Чи вийшов протокол ІДЕНТИЧНИМ порожньому бланку — тобто з диктовки не потрапило НІЧОГО.
+// Так буває, коли мікрофон не чув лікаря: Whisper на тиші віддає стороннє речення-галюцинацію
+// («дякую за перегляд»), промпт коректно ігнорує поза-контекст → повертає бланк як є, і лікар
+// бачить «порожній протокол» без жодного попередження. Порівнюємо ТЕКСТ (без тегів/пробілів),
+// бо модель може віддати ті самі дані з мікро-різницею у розмітці.
+function sameAsBlank(html, blank) {
+  if (!html || !blank) return false;
+  const norm = (s) => String(s).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  return norm(html) === norm(blank);
+}
+
 app.post("/api/autofill", async (req, res) => {
   if (!bedrock) return res.status(503).json({ error: "no_provider" });
   const raw = (req.body && req.body.text || "").trim();
@@ -2794,6 +2816,10 @@ app.post("/api/protocol", async (req, res) => {
   }
 
   const systemPrompt = promptFor(user, req.body && req.body.template);
+  // Ключ шаблону (та сама логіка, що в /api/skeleton) — щоб звірити результат із порожнім бланком.
+  const reqTpl = req.body && req.body.template;
+  const genTplKey = (reqTpl && mayUseTemplate(user, reqTpl)) ? reqTpl : (PROMPTS_BY_USER[user] || "default");
+  const genBlank = (TEMPLATES[genTplKey] && TEMPLATES[genTplKey].blank) || null;
 
   // Ланцюг провайдерів: основний → резерв. Кожен збій логуємо з кодом; успіх після збою — fallback:true.
   // Фінал — ЗАВЖДИ сильна модель: Bedrock-Sonnet (якість, AWS-креди) → Anthropic-Opus (сильний резерв)
@@ -2814,9 +2840,13 @@ app.post("/api/protocol", async (req, res) => {
     try {
       const html = sanitizeProtocolHtml(await step.run(systemPrompt, raw));
       const ms = Date.now() - t0;
+      // Порожній результат (= бланк) логуємо окремим кодом, щоб такі випадки було видно в аналітиці,
+      // а не тонули серед успішних генерацій.
+      const unchanged = sameAsBlank(html, genBlank);
       logEvent(uid, "generate_ok", Math.round(ms / 1000), user,
-        { provider: step.provider, model: step.model, stage: "generate", ms, fallback });
-      return res.json({ html, ms, provider: step.provider, model: step.model });
+        { provider: step.provider, model: step.model, stage: "generate", ms, fallback,
+          code: unchanged ? "blank_result" : undefined });
+      return res.json({ html, ms, provider: step.provider, model: step.model, unchanged });
     } catch (e) {
       const ms = Date.now() - t0;
       const code = (e && e.code) || "unknown";

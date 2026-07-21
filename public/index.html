@@ -347,6 +347,12 @@
     </div>
     <div class="hint">Натисніть «Почати запис» і диктуйте українською; цифри й розміри називайте чітко («сто сорок два міліметри»).
       Після «Зупинити» система розпізнає запис; далі натисніть «Сформувати протокол», і програма його заповнить. Сумнівні місця — <b>[?]</b>, перевірте перед збереженням.</div>
+    <!-- Розпізнаний текст: лікар МУСИТЬ бачити, що саме почула програма, і мати змогу виправити
+         до формування протоколу. Без цього порожній протокол виглядає як «програма не працює». -->
+    <div id="trWrap" hidden style="margin-top:10px">
+      <div class="hint" style="margin:0 0 4px"><b>Розпізнаний текст</b> — перевірте, за потреби виправте, і лише тоді формуйте протокол:</div>
+      <textarea id="trBox" rows="6" style="width:100%;font:14px/1.45 inherit;padding:8px;border:1px solid #ccc;border-radius:8px;resize:vertical;box-sizing:border-box"></textarea>
+    </div>
     <div id="pasteWrap" hidden style="margin-top:10px">
       <textarea id="pasteBox" rows="4" placeholder="Тестовий акаунт: встав сюди текст диктовки (поганий або ідеальний) і натисни «Згенерувати з тексту»" style="width:100%;font:14px/1.45 inherit;padding:8px;border:1px solid #ccc;border-radius:8px;resize:vertical;box-sizing:border-box"></textarea>
       <button id="pasteGenBtn" class="btn-ghost" style="align-self:flex-start">Згенерувати з тексту</button>
@@ -453,7 +459,7 @@
   if (!uid){ uid = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("uzd_uid", uid); }
   function track(event, value, meta){
     try{ fetch("/api/track", { method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify(Object.assign({ uid, event, value }, meta || {})) }); }catch(_){}
+      body: JSON.stringify(Object.assign({ uid, event, value }, meta || {})) }).catch(() => {}); }catch(_){}
   }
   track("visit");
 
@@ -546,7 +552,7 @@
     bar.hidden = false;
     document.getElementById("draftRestore").onclick = () => {
       if (recording) return;   // не затирати live-стан під час активного запису
-      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); }
+      if (d.dictation){ finalText = d.dictation; liveText = ""; render(""); showTranscript(finalText); }
       if (d.protocol){ renderProtocolHtml(d.protocol); }   // бренд-аварно: обгортає у рамку, якщо шаблон брендований
       bar.hidden = true;
       setStatus("Чернетку відновлено. Перевірте текст перед формуванням / копіюванням.");
@@ -591,10 +597,18 @@
   }
 
   // ── Хвиля: бари рухаються від звуку (підтверджує лікарю, що його чують) ──
+  // Побічно той самий аналізатор МІРЯЄ рівень: якщо за весь запис не було жодного сплеску —
+  // мікрофон лікаря не чув (телефон лежав далеко, мікрофон зайняв інший застосунок тощо).
   let audioCtx = null, analyser = null, waveRAF = 0, waveData = null;
+  let micPeak = 0, micTicks = 0;                       // пік рівня 0..255 і скільки разів реально міряли
+  // «Тиша» лише коли аналізатор справді працював (досить кадрів) — інакше мовчимо, щоб не
+  // блокувати нормальний запис на браузері, де AudioContext не завівся.
+  function micWasSilent(){ return micTicks >= 30 && micPeak < 6; }
   function startWave(stream){
     try{
+      micPeak = 0; micTicks = 0;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
       const src = audioCtx.createMediaStreamSource(stream);
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 128;
@@ -605,6 +619,10 @@
       const n = waveBars.length, bins = waveData.length;
       const tick = () => {
         analyser.getByteFrequencyData(waveData);
+        let peak = 0;
+        for (let i = 0; i < bins; i++) if (waveData[i] > peak) peak = waveData[i];
+        if (peak > micPeak) micPeak = peak;
+        micTicks++;
         for (let i = 0; i < n; i++){
           const dist = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);   // 0 центр .. 1 краї
           const idx = Math.min(bins - 1, Math.floor(dist * bins * 0.7));
@@ -646,6 +664,17 @@
   function render(){
     genBtn.disabled = trialExpired || !(finalText.trim() || recording);
   }
+
+  // ── Видимий транскрипт: показуємо лікарю, що почула програма (і даємо виправити) ──
+  const trWrap = document.getElementById("trWrap");
+  const trBox  = document.getElementById("trBox");
+  function showTranscript(text){
+    if (!trWrap || !trBox) return;
+    trBox.value = text || "";
+    trWrap.hidden = !String(text || "").trim();
+  }
+  function hideTranscript(){ if (trWrap){ trWrap.hidden = true; if (trBox) trBox.value = ""; } }
+  if (trBox) trBox.addEventListener("input", () => { finalText = trBox.value; saveDraft(); render(); });
 
   // Найкращий підтримуваний формат запису (opus компактний; Safari віддає mp4).
   function pickMime(){
@@ -1004,6 +1033,21 @@
     if (!blob.size){ setStatus("Нічого не записано — спробуйте ще раз.", true); render(); return; }
     transcribeRecording(blob);
   }
+  // На тиші/шумі Whisper не мовчить, а вигадує стороннє речення з YouTube-корпусу («дякую за перегляд»,
+  // «субтитри…»). Такий текст проходить далі як «розпізнано», а протокол виходить порожній — тож
+  // ловимо його тут за характерними фразами й за надто коротким змістом.
+  const ASR_NOISE = [
+    /дяку[ює]/, /перегляд/, /субтитр/, /підпис(уй|ка)/, /канал/, /далі буде/, /продовження/,
+    /редактор/, /переклад/, /amara\.org/, /thanks? for watching/, /subscribe/,
+  ];
+  function looksUnrecognized(text){
+    const t = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const letters = t.replace(/[^a-zа-яіїєґ0-9]/gi, "");
+    if (letters.length < 15) return true;                       // майже порожньо
+    if (letters.length < 80 && ASR_NOISE.some(re => re.test(t))) return true;  // коротке + шумна фраза
+    return false;
+  }
+
   // «Зупинити» лише зупиняє запис і РОЗПІЗНАЄ. Протокол формується окремо — кнопкою «Сформувати протокол».
   async function transcribeRecording(blob){
     setStatus("Розпізнаю запис…");
@@ -1021,8 +1065,17 @@
     }
     if (!text){ setStatus("Нічого не розпізнано — спробуйте ще раз.", true); render(); return; }
     finalText = text; saveDraft(); render();           // зберігаємо транскрипт; genBtn вмикається через render()
+    showTranscript(text);                              // лікар бачить розпізнане ОДРАЗУ, до формування
     timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнано";
-    setStatus("Запис розпізнано. Натисніть «Сформувати протокол».");
+    // Тиша в мікрофоні / характерна галюцинація Whisper на тиші → попереджаємо ДО генерації.
+    // Не блокуємо: текст лишається, лікар вирішує сам (раптом диктовка справді коротка).
+    if (micWasSilent()){
+      setStatus("Мікрофон майже не чув звуку за весь запис. Перевірте дозвіл на мікрофон і тримайте телефон ближче — інакше протокол лишиться порожнім.", true);
+    } else if (looksUnrecognized(text)){
+      setStatus("Диктовку розпізнано погано (текст порожній або сторонній). Перевірте текст запису — якщо там не ваші слова, продиктуйте ще раз.", true);
+    } else {
+      setStatus("Запис розпізнано. Натисніть «Сформувати протокол».");
+    }
   }
 
   async function startRec(){
@@ -1032,7 +1085,7 @@
       setStatus("Немає доступу до мікрофона. Дозвольте доступ у налаштуваннях браузера.", true);
       return;
     }
-    finalText = ""; recChunks = [];
+    finalText = ""; recChunks = []; hideTranscript();
     flagNav.classList.remove("show"); doc.contentEditable = "false";
     showSkeleton(true);                                // порожній бланк видно під час запису
     const mime = pickMime();
@@ -1078,7 +1131,7 @@
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
 
   clearBtn.addEventListener("click", () => {
-    finalText = ""; if (!recording) timerEl.textContent = "";
+    finalText = ""; hideTranscript(); if (!recording) timerEl.textContent = "";
     doc.innerHTML = ""; showFlagNav(); render(); wipeDraft();   // чистимо й протокол → новий пацієнт не успадкує старий
     lastSkeletonTmpl = null; showSkeleton(true);                // показати порожній бланк знову
   });
@@ -1194,7 +1247,11 @@
       if (beamOn) beamSend(data.html);      // ЧИСТИЙ протокол (не заанімований DOM) одразу летить на комп
       resetRating();                       // новий протокол → дозволяємо оцінити ще раз
       loadTrial();                          // перший протокол запускає відлік (TRIAL_DAYS) → оновлюємо лічильник
-      setStatus(flagCnt
+      // Протокол вийшов ІДЕНТИЧНИМ порожньому бланку → з диктовки не потрапило нічого.
+      // Кажемо це прямо, інакше лікар зберігає порожню форму й думає, що програма не працює.
+      if (data.unchanged){
+        setStatus("З диктовки нічого не потрапило в протокол — форма лишилась порожньою. Найчастіше це означає, що мікрофон вас не чув. Перевірте текст запису й продиктуйте ще раз, тримаючи телефон ближче.", true);
+      } else setStatus(flagCnt
         ? "Протокол готовий. Перевірте " + flagCnt + " позначених місць [?] перед збереженням."
         : "Протокол готовий. Перегляньте та відредагуйте за потреби.");
     }catch(err){
@@ -1213,7 +1270,7 @@
   pasteGenBtn.addEventListener("click", () => {
     const t = pasteBox.value.trim();
     if (!t){ setStatus("Встав текст диктовки для генерації.", true); return; }
-    finalText = t; render(); generateProtocol(true);
+    finalText = t; render(); showTranscript(t); generateProtocol(true);
   });
 
   // ── Тестовий період (TRIAL_DAYS від першого протоколу, термін задає сервер) ──
