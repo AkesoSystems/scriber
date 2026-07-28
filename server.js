@@ -225,7 +225,7 @@ function appendRowSync(row) {
 
 // Квота протоколів (ЛИШЕ відстеження, БЕЗ блокування): логін → базовий пакет протоколів.
 // Показуємо «використано/база» лікарю в апці та в консолі /stats. Відсутній логін = без квоти.
-const PROTOCOL_QUOTA_BY_USER = { test2: 100, test9: 100 };
+const PROTOCOL_QUOTA_BY_USER = { test2: 100, test9: 100, test10: 100 };
 function protocolsUsed(user, rows) {
   rows = rows || readAnalyticsRows();
   // «Обнулення» (адмін-подія quota_reset) переводить лічильник: рахуємо лише generate_ok ПІСЛЯ
