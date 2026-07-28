@@ -226,11 +226,18 @@ function appendRowSync(row) {
 // Квота протоколів (ЛИШЕ відстеження, БЕЗ блокування): логін → базовий пакет протоколів.
 // Показуємо «використано/база» лікарю в апці та в консолі /stats. Відсутній логін = без квоти.
 const PROTOCOL_QUOTA_BY_USER = { test2: 100, test9: 100, test10: 100 };
+// Початок ПЛАТНОГО циклу: протоколи, зроблені ДО цієї дати, у квоту не входять. Потрібне тому,
+// що quota_reset штампується поточним часом і забекдейтити його через API неможливо, а лікар
+// приходить на оплату вже з історією тестового періоду.
+// test9 — Ірина Левадна, оплата з 10.07.2026. test10 — Катерина Кравченко, липень за наш кошт,
+// платний цикл з 01.08.2026 (до того лічильник показує 0/квота).
+const QUOTA_SINCE_BY_USER = { test9: 1783630800000, test10: 1785531600000 };
 function protocolsUsed(user, rows) {
   rows = rows || readAnalyticsRows();
   // «Обнулення» (адмін-подія quota_reset) переводить лічильник: рахуємо лише generate_ok ПІСЛЯ
   // останнього reset. Історичні протоколи лишаються в аналітиці, але в квоту не входять.
-  let resetAt = 0;
+  // Стартова точка — якір платного циклу; пізніший ручний quota_reset його перекриває.
+  let resetAt = QUOTA_SINCE_BY_USER[user] || 0;
   for (const r of rows) if (r.user === user && r.event === "quota_reset" && typeof r.t === "number" && r.t > resetAt) resetAt = r.t;
   let n = 0;
   for (const r of rows) if (r.user === user && r.event === "generate_ok" && (r.t || 0) >= resetAt) n++;
