@@ -140,6 +140,10 @@ function logEvent(uid, event, value, user, meta) {
     // Дає відповідь «чи Whisper узагалі почув цифри», не порушуючи PHI-safe правило.
     if (typeof meta.chars === "number" && isFinite(meta.chars) && meta.chars >= 0) row.chars = Math.min(100000, Math.round(meta.chars));
     if (typeof meta.nums === "number" && isFinite(meta.nums) && meta.nums >= 0) row.nums = Math.min(10000, Math.round(meta.nums));
+    // Якість розпізнавання сегмента: скільки спроб з різною температурою знадобилось і скільки
+    // фрагментів лишились сумнівними. Теж ЛИШЕ числа — по них видно, чи зриви Whisper тривають.
+    if (typeof meta.tries === "number" && isFinite(meta.tries) && meta.tries >= 0) row.tries = Math.min(10, Math.round(meta.tries));
+    if (typeof meta.lowconf === "number" && isFinite(meta.lowconf) && meta.lowconf >= 0) row.lowconf = Math.min(1000, Math.round(meta.lowconf));
   }
   fs.appendFile(ANALYTICS_FILE, JSON.stringify(row) + "\n", (err) => {
     if (err) console.error("[analytics] запис не вдався:", err.message);
@@ -2485,6 +2489,66 @@ const UZD_PROMPT = [
   "фракція викиду, градієнт, регургітація. Розміри в міліметрах і сантиметрах.",
 ].join(" ");
 
+// Словник рентгенографії грудної порожнини. Загальний УЗД-словник вище описує ЧЕРЕВНУ порожнину
+// (печінка, жовчний, селезінка) і для рентгену грудної працює проти нас: prompt — сильний сигнал
+// зумовлення декодера, тож на диктовці «інтерстиційний тип затемнення прикоренево» Whisper зривався
+// і викидав цілі речення (протокол Кравченко 05.08 — зникли легені й усе «Заключення»).
+// БЮДЖЕТ: Whisper враховує лише ОСТАННІ ~224 токени prompt. Тримати ≤ ~450 символів, інакше
+// словник обріже сам себе, а якщо додається хвіст попереднього сегмента — виб'є ще й його.
+const THORAX_ASR_PROMPT = [
+  "Протокол рентгенографії грудної порожнини.",
+  "Терміни: трахея, карина, бронхи головні і дольові, паренхіма легень,",
+  "інтерстиційний, альвеолярний і бронхіальний тип затемнення, прикоренево,",
+  "плевральна порожнина, випіт, пневмоторакс, ателектаз, середостіння,",
+  "перибронхіальні і стернальні лімфатичні вузли, стравохід, діафрагма,",
+  "кардіомегалія, набряк легень. Контрольна рентгенографія через 7-10 днів.",
+].join(" ");
+
+// Словник ASR на КЛЮЧ шаблону. Немає запису → загальний УЗД-словник (як було), щоб жоден
+// наявний лікар не змінив поведінку. kravchenko_ct свідомо не чіпаємо: там КТ голови/шиї, і
+// торакальний словник був би для неї так само чужим, як зараз черевний.
+const ASR_PROMPTS = { kravchenko_thorax: THORAX_ASR_PROMPT };
+function asrPromptFor(user, requestedTemplate) {
+  const key = (requestedTemplate && mayUseTemplate(user, requestedTemplate))
+    ? requestedTemplate
+    : PROMPTS_BY_USER[user];
+  return ASR_PROMPTS[key] || UZD_PROMPT;
+}
+
+// Пороги з референсної реалізації Whisper: надто висока стисливість = модель зациклилась на
+// одній фразі, надто низька середня логімовірність = сама собі не вірить. Обидва — маркери
+// того самого зриву, через який пропадають речення. Якщо Groq не віддав segments — вважаємо,
+// що поганих немає: тоді поведінка рівно така сама, як була до цієї зміни.
+const ASR_BAD_COMPRESSION = 2.4;
+const ASR_BAD_LOGPROB = -1.0;
+function badSegments(segments) {
+  if (!Array.isArray(segments)) return 0;
+  let n = 0;
+  for (const s of segments) {
+    if (!s || typeof s !== "object") continue;
+    const cr = typeof s.compression_ratio === "number" ? s.compression_ratio : 0;
+    const lp = typeof s.avg_logprob === "number" ? s.avg_logprob : 0;
+    if (cr > ASR_BAD_COMPRESSION || lp < ASR_BAD_LOGPROB) n++;
+  }
+  return n;
+}
+
+function groqTranscribe(buffer, mimetype, filename, prompt, temperature) {
+  const form = new FormData();
+  const blob = new Blob([buffer], { type: mimetype || "audio/webm" });
+  form.append("file", blob, filename || "audio.webm");
+  form.append("model", "whisper-large-v3");
+  form.append("language", "uk");
+  form.append("prompt", prompt);
+  form.append("temperature", String(temperature));
+  form.append("response_format", "verbose_json");   // потрібні segments із метриками якості
+  return fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+    body: form,
+  });
+}
+
 app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
   const user = getAuthUser(req);
   const uid = (req.body && req.body.uid) || "server";
@@ -2499,37 +2563,44 @@ app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
 
   const t0 = Date.now();
   try {
-    const form = new FormData();
-    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || "audio/webm" });
-    form.append("file", blob, req.file.originalname || "audio.webm");
-    form.append("model", "whisper-large-v3");
-    form.append("language", "uk");
-    form.append("prompt", UZD_PROMPT);
-    form.append("temperature", "0");
-    form.append("response_format", "json");
+    // Словник під шаблон лікаря + хвіст попереднього сегмента як контекст стику. Хвіст — це
+    // ВЖЕ розпізнаний ТЕКСТ, який клієнт щойно отримав від нас; у логи він не потрапляє.
+    const basePrompt = asrPromptFor(user, req.body && req.body.template);
+    const tail = String((req.body && req.body.tail) || "").slice(-120).trim();
+    const prompt = tail ? basePrompt + " " + tail : basePrompt;
 
-    const r = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-      body: form,
-    });
-
-    if (!r.ok) {
-      // Тіло помилки Groq показуємо лікарю, але НЕ логуємо (може містити фрагменти диктовки).
-      const detail = (await r.text().catch(() => "")).slice(0, 300);
-      logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_500" });
-      return res.status(502).json({ error: "Помилка розпізнавання (Groq)." + (detail ? " Деталі: " + detail : "") });
+    // Ретрай по температурі — те, що робить референсний декодер Whisper і чого немає в
+    // одиничному виклику Groq: на зриві перезапускаємо шматок «гарячіше» і лишаємо найкращу
+    // спробу. Сегменти короткі, тож навіть третя спроба коштує копійки.
+    const TEMPS = [0, 0.2, 0.4];
+    let best = null, tries = 0;
+    for (const temp of TEMPS) {
+      const r = await groqTranscribe(
+        req.file.buffer, req.file.mimetype, req.file.originalname, prompt, temp
+      );
+      if (!r.ok) {
+        // Тіло помилки Groq показуємо лікарю, але НЕ логуємо (може містити фрагменти диктовки).
+        const detail = (await r.text().catch(() => "")).slice(0, 300);
+        logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_500" });
+        return res.status(502).json({ error: "Помилка розпізнавання (Groq)." + (detail ? " Деталі: " + detail : "") });
+      }
+      const d = await r.json();
+      tries++;
+      const bad = badSegments(d.segments);
+      if (!best || bad < best.bad) best = { data: d, bad };
+      if (!bad) break;
     }
 
-    const data = await r.json();
+    const data = best.data;
+    const lowConf = best.bad;
     const ms = Date.now() - t0;
     // PHI-safe метрики транскрипту: САМ ТЕКСТ не логуємо ніколи, лише скільки символів і скільки
     // числівників у ньому. Без цього неможливо відрізнити «Whisper нічого не почув» від «почув, але
     // модель не заповнила» — саме на цьому ми загрузли з порожніми протоколами.
     const text = (data.text || "").trim();
     const nums = (text.match(/\d|\b(?:нуль|один|одна|два|дві|три|чотири|п'ять|шість|сім|вісім|дев'ять|десять|одинадцять|дванадцять|тринадцять|чотирнадцять|пʼятнадцять|шістнадцять|сімнадцять|вісімнадцять|дев'ятнадцять|двадцять|тридцять|сорок|п'ятдесят|шістдесят|сімдесят|вісімдесят|дев'яносто|сто|двісті|триста)\b/gi) || []).length;
-    logEvent(uid, "transcribe_ok", Math.round(ms / 1000), user, { stage: "transcribe", ms, chars: text.length, nums });
-    res.json({ text });
+    logEvent(uid, "transcribe_ok", Math.round(ms / 1000), user, { stage: "transcribe", ms, chars: text.length, nums, tries, lowconf: lowConf });
+    res.json({ text, lowConf });
   } catch (err) {
     logEvent(uid, "transcribe_err", null, user, { stage: "transcribe", code: "groq_network" });
     res.status(500).json({ error: "Не вдалося розпізнати аудіо: " + (err.message || "невідома помилка") });

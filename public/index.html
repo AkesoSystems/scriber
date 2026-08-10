@@ -239,6 +239,9 @@
   #annotBar .ab-col-custom::-webkit-color-swatch{border:none;border-radius:50%;}
   #annotBar .ab-col-custom::-moz-color-swatch{border:none;border-radius:50%;}
   #annotBar .ab-done{background:#3a7d44;border-color:#4a9d54;color:#fff;}
+  #annotBar .ab-size{display:inline-flex;gap:3px;}
+  #annotBar .ab-sz{min-width:30px;padding:7px 6px;text-align:center;}
+  #annotBar .ab-sample{width:116px;height:26px;flex:none;background:#0f0a1c;border:1px solid #3a2a5a;border-radius:6px;}
   /* підпис/печатка/дисклеймер — у потоці після знімків (коректно для будь-якої довжини) */
   /* ФІКСОВАНІ позиції як у макеті: печатка центр ~48mm, підпис центр ~145mm (НЕ space-between!) */
   .branded-doc .bd-signrow{display:flex;align-items:center;padding:6px 16mm 0 0;}
@@ -398,6 +401,17 @@
     <button type="button" class="ab-col" data-col="#12b04a" style="background:#12b04a" title="Зелений" aria-label="Зелений"></button>
     <input type="color" id="abColCustom" class="ab-col ab-col-custom" value="#3b82f6" title="Свій колір" aria-label="Свій колір">
     <span class="ab-sep"></span>
+    <span class="ab-size" role="group" aria-label="Розмір інструмента">
+      <button type="button" class="ab-sz" data-sz="0.55" title="Дрібний">S</button>
+      <button type="button" class="ab-sz on" data-sz="0.85" title="Середній">M</button>
+      <button type="button" class="ab-sz" data-sz="1.2" title="Великий">L</button>
+      <button type="button" class="ab-sz" data-sz="1.8" title="Дуже великий">XL</button>
+    </span>
+    <!-- Зразок у ПАПЕРОВОМУ масштабі: у редакторі знімок розтягнутий до 78vh, а на аркуші займає
+         52% ширини, тому все намальоване виглядає тут удвічі товщим ніж вийде на друку. Без цього
+         зразка лікар обирає розмір «на око» і систематично промахується. -->
+    <svg id="abSample" class="ab-sample" viewBox="0 0 116 26" aria-hidden="true"></svg>
+    <span class="ab-sep"></span>
     <button type="button" id="abUndo" title="Скасувати останнє">↶ Скасувати</button>
     <button type="button" id="abClear" title="Очистити все на цьому знімку">Очистити</button>
     <span class="ab-sep"></span>
@@ -493,10 +507,17 @@
   let liveText = "";         // живий текст поточного запису (накопичені сегменти Whisper)
   let recording = false;
   let micStream = null;
-  let segRec = null;         // рекордер коротких сегментів (~8 с)
-  let segChunks = [];
-  let segTimer = null;
-  let transcribing = null;   // проміс, що резолвиться, коли фінальний сегмент дописано
+  // ── Стан нарізки запису на сегменти й черги розпізнавання (деталі — біля startRec) ──
+  let segStartedAt = 0;      // коли почався поточний сегмент
+  let segTimer = null;       // вартовий, що вирішує коли різати
+  let segCutting = false;    // stop() рекордера = проміжний зріз, а не кінець запису
+  let segQuietHits = 0;      // скільки перевірок поспіль у мікрофоні тиша (ріжемо в паузі)
+  let asrQueue = [];         // сегменти, що чекають на Groq
+  let asrParts = [];         // розпізнаний текст по сегментах, у порядку запису
+  let asrBusy = false;       // зараз один сегмент у Groq (шлемо строго по черзі)
+  let asrErr = "";           // перша помилка розпізнавання — показуємо лікарю в кінці
+  let asrLowConf = 0;        // скільки фрагментів Whisper розпізнав невпевнено
+  let asrRecStopped = false; // запис завершено → після спорожнення черги можна підбивати підсумок
   let finalizeResolve = null;
   let recStartedAt = 0;
   let stickToBottom = true;
@@ -559,7 +580,11 @@
     };
     document.getElementById("draftDiscard").onclick = () => { wipeDraft(); bar.hidden = true; };
   }
-  const SEG_BPS = 24000;     // бітрейт opus (мовна якість) — тримає файли крихітними
+  const SEG_BPS = 32000;     // бітрейт opus: 24k різав тихі закінчення слів, 32k ще крихітний (45 с ≈ 180 КБ)
+  // Нарізка запису. Не раніше SEG_MIN_MS, не пізніше SEG_MAX_MS; усередині вікна ріжемо в паузі.
+  const SEG_MIN_MS = 40000;
+  const SEG_MAX_MS = 70000;
+  const SEG_QUIET  = 12;     // рівень мікрофона 0..255, нижче якого вважаємо що лікар мовчить
 
   // Секундомір: час запису + час розпізнавання
   const timerEl = document.getElementById("timer");
@@ -601,12 +626,13 @@
   // мікрофон лікаря не чув (телефон лежав далеко, мікрофон зайняв інший застосунок тощо).
   let audioCtx = null, analyser = null, waveRAF = 0, waveData = null;
   let micPeak = 0, micTicks = 0;                       // пік рівня 0..255 і скільки разів реально міряли
+  let micNow = 0;                                      // МИТТЄВИЙ рівень — за ним ловимо паузу, щоб різати сегмент між фразами
   // «Тиша» лише коли аналізатор справді працював (досить кадрів) — інакше мовчимо, щоб не
   // блокувати нормальний запис на браузері, де AudioContext не завівся.
   function micWasSilent(){ return micTicks >= 30 && micPeak < 6; }
   function startWave(stream){
     try{
-      micPeak = 0; micTicks = 0;
+      micPeak = 0; micTicks = 0; micNow = 0;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
       const src = audioCtx.createMediaStreamSource(stream);
@@ -622,6 +648,7 @@
         let peak = 0;
         for (let i = 0; i < bins; i++) if (waveData[i] > peak) peak = waveData[i];
         if (peak > micPeak) micPeak = peak;
+        micNow = peak;
         micTicks++;
         for (let i = 0; i < n; i++){
           const dist = Math.abs(i - (n - 1) / 2) / ((n - 1) / 2);   // 0 центр .. 1 краї
@@ -662,7 +689,9 @@
   }
 
   function render(){
-    genBtn.disabled = trialExpired || !(finalText.trim() || recording);
+    // Поки хоч один сегмент ще в Groq, протокол формувати не даємо: інакше після «Зупинити»
+    // можна натиснути на половині розпізнаного тексту й отримати обрізаний протокол.
+    genBtn.disabled = trialExpired || asrPending() || !(finalText.trim() || recording);
   }
 
   // ── Видимий транскрипт: показуємо лікарю, що почула програма (і даємо виправити) ──
@@ -793,6 +822,14 @@
   // ═══ Розмітка знімка: повноекранний редактор (стрілки / олівець / текст) → зберігає у SVG на знімку → PDF ═══
   const SVGNS = "http://www.w3.org/2000/svg";
   let annotTarget = null, annotTool = "arrow", annotColor = "#e0241b", annotDraw = null;
+  // Множник розміру стрілки / олівця / підпису. Базові коефіцієнти нижче (0.007 і 0.05 від
+  // більшої сторони знімка) були зашиті намертво і виявились завеликими — множник дає лікарю
+  // регулятор, а типове значення M свідомо трохи менше за колишню одиницю.
+  const ANNOT_SIZES = [0.55, 0.85, 1.2, 1.8];
+  let annotSize = (() => {
+    const v = Number(localStorage.getItem("uzd_annot_size"));
+    return ANNOT_SIZES.indexOf(v) >= 0 ? v : 0.85;     // чуже значення в сховищі → типовий M
+  })();
   const annotModal = document.getElementById("annotModal");
   const amImg = document.getElementById("amImg");
   const amSvg = document.getElementById("amSvg");
@@ -858,7 +895,7 @@
     amSvg.addEventListener("pointerdown", ev => {
       if (annotModal.hidden) return;
       ev.preventDefault();
-      const p = toSvgXY(amSvg, ev), u = annotUnit(amSvg), sw = Math.max(2, u * 0.007);
+      const p = toSvgXY(amSvg, ev), u = annotUnit(amSvg) * annotSize, sw = Math.max(2, u * 0.007);
       if (annotTool === "text"){
         const t = (window.prompt("Текст підпису:") || "").trim();
         if (t){ const el = mkNS("text", { x:p.x, y:p.y, fill:annotColor, "font-size":(u*0.05), "font-family":"'Times New Roman',serif", "dominant-baseline":"hanging", stroke:"#fff", "stroke-width":(u*0.004), "paint-order":"stroke", "pointer-events":"none" }); el.textContent = t; amSvg.appendChild(el); }
@@ -896,6 +933,35 @@
       annotColor = customCol.value;
       document.querySelectorAll("#annotBar .ab-col").forEach(x => x.classList.toggle("on", x === customCol));
     });
+    // ── Розмір інструментів + зразок у паперовому масштабі ──
+    // Зразок малюємо так, ніби знімок уже на аркуші: беремо ті самі коефіцієнти, але приводимо
+    // їх до ширини знімка на папері (~52% від .bd-canvas), а не до розтягнутого прев'ю редактора.
+    const sample = document.getElementById("abSample");
+    function drawSample(){
+      if (!sample) return;
+      while (sample.firstChild) sample.removeChild(sample.firstChild);
+      const u = 116 / 0.52 * annotSize;                 // 116 = ширина зразка в його ж viewBox
+      const sw = Math.max(0.4, u * 0.007), head = Math.max(2, u * 0.05);
+      sample.appendChild(mkNS("path", { d: arrowPath(6, 20, 44, 7, head), fill:"none", stroke:annotColor,
+        "stroke-width":sw, "stroke-linecap":"round", "stroke-linejoin":"round" }));
+      const tx = mkNS("text", { x:52, y:5, fill:annotColor, "font-size":(u*0.05),
+        "font-family":"'Times New Roman',serif", "dominant-baseline":"hanging" });
+      tx.textContent = "текст";
+      sample.appendChild(tx);
+    }
+    document.querySelectorAll("#annotBar .ab-sz").forEach(b => {
+      b.classList.toggle("on", Number(b.dataset.sz) === annotSize);
+      b.addEventListener("click", () => {
+        annotSize = Number(b.dataset.sz);
+        try{ localStorage.setItem("uzd_annot_size", String(annotSize)); }catch(_){}
+        document.querySelectorAll("#annotBar .ab-sz").forEach(x => x.classList.toggle("on", x === b));
+        drawSample();
+      });
+    });
+    document.querySelectorAll("#annotBar .ab-col, #annotBar button.ab-col").forEach(b => b.addEventListener("click", drawSample));
+    if (customCol) customCol.addEventListener("input", drawSample);
+    drawSample();
+
     const undoBtn = document.getElementById("abUndo"), clearBtn = document.getElementById("abClear"),
           doneBtn = document.getElementById("abDone"), cancelBtn = document.getElementById("abCancel");
     undoBtn && undoBtn.addEventListener("click", () => { if (amSvg && amSvg.lastElementChild && !isHit(amSvg.lastElementChild)) amSvg.removeChild(amSvg.lastElementChild); });
@@ -1024,14 +1090,120 @@
     });
   }
 
-  // ── Запис: ОДИН безперервний MediaRecorder. На стопі — транскрипція всього запису
-  //    одним файлом (повний контекст → краще тримає терміни), далі Sonnet формує протокол. ──
+  // ── Запис: MediaRecorder, нарізаний на самодостатні сегменти ~45 с ──
+  // Раніше весь протокол ішов ОДНИМ файлом. Це давало два різні збої, обидва мовчазні:
+  //  (1) nginx перед застосунком ріже тіло запиту на 1 МБ, тобто будь-яка диктовка довша
+  //      за ~5 хв падала з 413 ще до сервера — у логах ні сліду, лікар бачив лише «не
+  //      сформувався» (13-хвилинний запис Роксоляни, 07.08);
+  //  (2) whisper-large-v3 на довгому аудіо зривається і викидає цілі речення — так у
+  //      протоколі Кравченко зникли легені й усе «Заключення» (05.08).
+  // Короткі шматки лікують обидва: кожен ~180 КБ, і зрив на одному не забирає весь протокол.
+  // Ріжемо СТОП-СТАРТОМ рекордера: кожен сегмент — валідний файл із власним хедером. Трюк
+  // «хедер webm + наступні кластери» дав би той самий ефект без розриву, але працює лише для
+  // webm, а Safari віддає mp4 — тож він не годиться як єдиний шлях.
   let mediaRec = null, recChunks = [];
   function onRecStopped(){
     const blob = new Blob(recChunks, { type: (mediaRec && mediaRec.mimeType) || "audio/webm" });
-    micStream = null; recChunks = [];
-    if (!blob.size){ setStatus("Нічого не записано — спробуйте ще раз.", true); render(); return; }
-    transcribeRecording(blob);
+    recChunks = [];
+    if (segCutting){                                   // проміжний зріз — запис триває далі
+      segCutting = false;
+      pushSegment(blob);
+      startSegRecorder();
+      return;
+    }
+    if (asrRecStopped) return;                         // фінал уже відпрацював (рекордер міг стати
+                                                       // inactive сам, коли обірвався трек) — не дублюємо
+    asrRecStopped = true;
+    if (micStream){ micStream.getTracks().forEach(t => t.stop()); }   // мікрофон гасимо ПІСЛЯ рекордера,
+    micStream = null;                                                 // інакше губиться остання секунда
+    if (blob.size) pushSegment(blob);
+    if (!asrParts.length){ setStatus("Нічого не записано — спробуйте ще раз.", true); render(); return; }
+    drainAsr();                                        // черга вже могла спорожніти → одразу підсумок
+  }
+
+  // Новий рекордер на ТОМУ САМОМУ мікрофонному потоці — стрім не переривається, пауза між
+  // сегментами в межах кадру події, тож на слух розриву немає.
+  function startSegRecorder(){
+    if (!micStream) return;
+    const opts = { audioBitsPerSecond: SEG_BPS };
+    const mime = pickMime();
+    if (mime) opts.mimeType = mime;
+    try{ mediaRec = new MediaRecorder(micStream, opts); }
+    catch(_){ mediaRec = new MediaRecorder(micStream); }
+    mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop = onRecStopped;
+    mediaRec.start(1000);                              // дані щосекунди (страховка від втрати при краху)
+    segStartedAt = Date.now(); segQuietHits = 0;
+  }
+  function cutSegment(){
+    if (!recording || segCutting || !mediaRec || mediaRec.state !== "recording") return;
+    segCutting = true;
+    try{ mediaRec.stop(); }catch(_){ segCutting = false; }
+  }
+
+  // ── Черга розпізнавання ──
+  // Сегменти йдуть у Groq ПОСЛІДОВНО (щоб можна було передати хвіст попереднього як контекст)
+  // і ПАРАЛЕЛЬНО з диктовкою — тож на «Зупинити» лишається розпізнати лише останній шматок,
+  // а не весь протокол. Лікарки скаржаться саме на витрачений час.
+  function resetAsr(){
+    asrQueue = []; asrParts = []; asrBusy = false; asrErr = ""; asrLowConf = 0; asrRecStopped = false;
+  }
+  function asrPending(){ return asrBusy || asrQueue.length > 0; }
+  function pushSegment(blob){
+    if (!blob || !blob.size) return;
+    const seq = asrParts.length;
+    asrParts.push("");                                 // місце під текст — порядок тримаємо за індексом
+    asrQueue.push({ blob, seq });
+    drainAsr();
+  }
+  function asrTextSoFar(){ return asrParts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim(); }
+  function segExt(){
+    const m = (mediaRec && mediaRec.mimeType) || "";
+    if (m.indexOf("mp4") >= 0) return "mp4";
+    if (m.indexOf("ogg") >= 0) return "ogg";
+    return "webm";
+  }
+  async function drainAsr(){
+    if (asrBusy) return;
+    const job = asrQueue.shift();
+    if (!job){ if (asrRecStopped) finishTranscription(); return; }
+    asrBusy = true;
+    if (asrRecStopped) setStatus("Розпізнаю запис… лишилось фрагментів: " + (asrQueue.length + 1));
+    try{
+      const fd = new FormData();
+      fd.append("audio", job.blob, "rec." + segExt());
+      fd.append("uid", uid);
+      const tmpl = curTemplate();
+      if (tmpl) fd.append("template", tmpl);           // словник термінів під шаблон лікаря
+      const tail = asrTextSoFar().slice(-120);
+      if (tail) fd.append("tail", tail);               // хвіст попереднього шматка = контекст для стику
+      const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+      if (r.status === 413) throw new Error("Сервер відхилив запис як завеликий. Це наша помилка налаштування, не ваша — напишіть нам.");
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || "Помилка розпізнавання.");
+      // Сегмент, у якому лікар мовчав, Whisper заповнює фразою з YouTube-корпусу. Раніше такий
+      // текст був увесь транскрипт і ловився в кінці; тепер він може прилипнути ВСЕРЕДИНУ
+      // протоколу між нормальними шматками, тож відсіюємо його одразу на своєму місці.
+      const segText = (data.text || "").trim();
+      asrParts[job.seq] = isAsrNoise(segText) ? "" : segText;
+      if (typeof data.lowConf === "number") asrLowConf += data.lowConf;
+    }catch(err){
+      asrParts[job.seq] = "";
+      if (!asrErr) asrErr = err.message || "Не вдалося розпізнати аудіо.";
+    }
+    asrBusy = false;
+    liveTranscript();
+    drainAsr();
+  }
+  // Показуємо текст, що вже розпізнано, ПОКИ триває диктовка — лікар бачить що його чують.
+  // Не чіпаємо поле, якщо лікар саме в ньому щось править.
+  function liveTranscript(){
+    if (!recording) return;
+    if (trBox && document.activeElement === trBox) return;
+    const t = asrTextSoFar();
+    if (!t) return;
+    finalText = t; saveDraft();
+    showTranscript(t);
   }
   // На тиші/шумі Whisper не мовчить, а вигадує стороннє речення з YouTube-корпусу («дякую за перегляд»,
   // «субтитри…»). Такий текст проходить далі як «розпізнано», а протокол виходить порожній — тож
@@ -1040,39 +1212,40 @@
     /дяку[ює]/, /перегляд/, /субтитр/, /підпис(уй|ка)/, /канал/, /далі буде/, /продовження/,
     /редактор/, /переклад/, /amara\.org/, /thanks? for watching/, /subscribe/,
   ];
+  // Коротко + характерна фраза = галюцинація на тиші. Саме «коротко» тут обов'язкове: слово
+  // «переклад» чи «канал» цілком може бути в справжній довгій диктовці.
+  function isAsrNoise(text){
+    const t = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const letters = t.replace(/[^a-zа-яіїєґ0-9]/gi, "");
+    return letters.length < 80 && ASR_NOISE.some(re => re.test(t));
+  }
   function looksUnrecognized(text){
     const t = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
     const letters = t.replace(/[^a-zа-яіїєґ0-9]/gi, "");
     if (letters.length < 15) return true;                       // майже порожньо
-    if (letters.length < 80 && ASR_NOISE.some(re => re.test(t))) return true;  // коротке + шумна фраза
-    return false;
+    return isAsrNoise(t);
   }
 
   // «Зупинити» лише зупиняє запис і РОЗПІЗНАЄ. Протокол формується окремо — кнопкою «Сформувати протокол».
-  async function transcribeRecording(blob){
-    setStatus("Розпізнаю запис…");
-    let text = "";
-    try{
-      const fd = new FormData();
-      fd.append("audio", blob, "rec.webm");
-      fd.append("uid", uid);
-      const r = await fetch("/api/transcribe", { method: "POST", body: fd });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || "Помилка розпізнавання.");
-      text = (data.text || "").trim();
-    }catch(err){
-      setStatus(err.message || "Не вдалося розпізнати аудіо.", true); render(); return;
+  // Сюди потрапляємо, коли запис завершено І черга сегментів спорожніла.
+  function finishTranscription(){
+    const text = asrTextSoFar();
+    if (!text){
+      setStatus(asrErr || "Нічого не розпізнано — спробуйте ще раз.", true); render(); return;
     }
-    if (!text){ setStatus("Нічого не розпізнано — спробуйте ще раз.", true); render(); return; }
     finalText = text; saveDraft(); render();           // зберігаємо транскрипт; genBtn вмикається через render()
     showTranscript(text);                              // лікар бачить розпізнане ОДРАЗУ, до формування
     timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнано";
     // Тиша в мікрофоні / характерна галюцинація Whisper на тиші → попереджаємо ДО генерації.
     // Не блокуємо: текст лишається, лікар вирішує сам (раптом диктовка справді коротка).
-    if (micWasSilent()){
+    if (asrErr){
+      setStatus("Частину запису не вдалося розпізнати (" + asrErr + ") Звірте текст: у ньому може бракувати шматка диктовки.", true);
+    } else if (micWasSilent()){
       setStatus("Мікрофон майже не чув звуку за весь запис. Перевірте дозвіл на мікрофон і тримайте телефон ближче — інакше протокол лишиться порожнім.", true);
     } else if (looksUnrecognized(text)){
       setStatus("Диктовку розпізнано погано (текст порожній або сторонній). Перевірте текст запису — якщо там не ваші слова, продиктуйте ще раз.", true);
+    } else if (asrLowConf){
+      setStatus("Запис розпізнано, але " + asrLowConf + " фрагмент(ів) звучали нерозбірливо. Звірте текст перед формуванням протоколу.", true);
     } else {
       setStatus("Запис розпізнано. Натисніть «Сформувати протокол».");
     }
@@ -1086,17 +1259,23 @@
       return;
     }
     finalText = ""; recChunks = []; hideTranscript();
+    resetAsr(); segCutting = false;
     flagNav.classList.remove("show"); doc.contentEditable = "false";
     showSkeleton(true);                                // порожній бланк видно під час запису
-    const mime = pickMime();
-    const opts = { audioBitsPerSecond: SEG_BPS };
-    if (mime) opts.mimeType = mime;
-    mediaRec = new MediaRecorder(micStream, opts);
-    mediaRec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
-    mediaRec.onstop = onRecStopped;
-    mediaRec.start(1000);                              // дані щосекунди (страховка від втрати при краху)
-    startWave(micStream);
+    startWave(micStream);                              // до рекордера: вартовому потрібен рівень мікрофона
+    startSegRecorder();
     recording = true;
+    // Вартовий нарізки: після SEG_MIN_MS чекаємо паузу в мовленні (≈1.5 с тиші) і ріжемо там,
+    // щоб не розірвати слово; якщо лікар говорить без упину — ріжемо примусово на SEG_MAX_MS.
+    if (segTimer) clearInterval(segTimer);
+    segTimer = setInterval(() => {
+      if (!recording || segCutting) return;
+      const el = Date.now() - segStartedAt;
+      if (el >= SEG_MAX_MS){ cutSegment(); return; }
+      if (el < SEG_MIN_MS) return;
+      segQuietHits = (micNow < SEG_QUIET) ? segQuietHits + 1 : 0;
+      if (segQuietHits >= 3) cutSegment();
+    }, 500);
     acquireWakeLock();                                 // екран не гасне, поки диктують (важливо на телефоні)
     recStartedAt = Date.now();
     track("rec_start");
@@ -1117,15 +1296,19 @@
     if (recStartedAt){ lastRecDur = Date.now() - recStartedAt; track("rec_stop", Math.round(lastRecDur / 1000)); recStartedAt = 0; }
     if (recTimer){ clearInterval(recTimer); recTimer = null; }
     recStopAt = Date.now();
-    if (micStream){ micStream.getTracks().forEach(t => t.stop()); }
     recBtn.classList.remove("recording");
     recBtn.innerHTML = '<span class="dot"></span>Почати запис';
     doc.contentEditable = "true";
     timerEl.textContent = "запис " + fmtT(lastRecDur) + " · розпізнаю…";
+    if (segTimer){ clearInterval(segTimer); segTimer = null; }
+    // Якщо зріз саме «в польоті» — його onstop уже призначено, лишається перевести його з
+    // проміжного у фінальний, інакше onRecStopped спрацює двічі й запис завершиться двічі.
+    const wasCutting = segCutting;
+    segCutting = false;
     try{
       if (mediaRec && mediaRec.state !== "inactive") mediaRec.stop();   // → onRecStopped
-      else onRecStopped();
-    }catch(_){ onRecStopped(); }
+      else if (!wasCutting) onRecStopped();
+    }catch(_){ if (!wasCutting) onRecStopped(); }
   }
 
   recBtn.addEventListener("click", () => recording ? stopRec() : startRec());
