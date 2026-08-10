@@ -2566,8 +2566,12 @@ app.post("/api/transcribe", uploadAudio.single("audio"), async (req, res) => {
     // Словник під шаблон лікаря + хвіст попереднього сегмента як контекст стику. Хвіст — це
     // ВЖЕ розпізнаний ТЕКСТ, який клієнт щойно отримав від нас; у логи він не потрапляє.
     const basePrompt = asrPromptFor(user, req.body && req.body.template);
-    const tail = String((req.body && req.body.tail) || "").slice(-120).trim();
-    const prompt = tail ? basePrompt + " " + tail : basePrompt;
+    const tail = String((req.body && req.body.tail) || "").slice(-80).trim();
+    // Порядок НЕ випадковий: Whisper бере лише ОСТАННІ ~224 токени prompt, тож те, що стоїть
+    // ближче до кінця, виживає при обрізанні. Словник дає підтверджений виграш (пробний A/B:
+    // «Тракія/інтерститіальну» → «Трахея/інтерстиційну»), хвіст лише згладжує стик сегментів,
+    // тому словник тримаємо ПІСЛЯ хвоста — жертвуємо хвостом, а не ним.
+    const prompt = tail ? tail + " " + basePrompt : basePrompt;
 
     // Ретрай по температурі — те, що робить референсний декодер Whisper і чого немає в
     // одиничному виклику Groq: на зриві перезапускаємо шматок «гарячіше» і лишаємо найкращу
